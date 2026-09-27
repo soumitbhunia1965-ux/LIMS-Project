@@ -1,0 +1,78 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block title %}{{ title }} | QC LIMS Administration{% endblock %}
+
+{% block branding %}
+<div id="site-name" style="display: flex; align-items: center; gap: 12px; padding: 4px 0;">
+    <img src="{% static 'lab/lims_logo.png' %}" alt="LIMS Logo" style="height: 38px; background: #fff; padding: 3px; border-radius: 6px;">
+    <div>
+        <span style="font-size: 1.25rem; font-weight: 700; letter-spacing: 0.5px; color: #ffffff;">QC LIMS Portal</span>
+        <span style="font-size: 0.8rem; color: #00c087; font-weight: 600; display: block; text-transform: uppercase; letter-spacing: 1px;">Regulatory Control Console</span>
+    </div>
+</div>
+{% endblock %}
+
+{% block extrahead %}
+{{ block.super }}
+<style>
+    /* Deep Corporate Theme */
+    :root {
+        --primary: #071b30 !important;
+        --secondary: #0c335e !important;
+        --accent: #00c087 !important;
+        --header-bg: #071b30 !important;
+        --header-color: #ffffff !important;
+        --breadcrumbs-bg: #0c2544 !important;
+        --link-fg: #0d6efd !important;
+    }
+    #header {
+        background: linear-gradient(135deg, #071527 0%, #0d2847 60%, #044b3c 100%) !important;
+        border-bottom: 3px solid #00c087 !important;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+    }
+    .breadcrumbs {
+        background: #091a2e !important;
+        color: #9cb3ce !important;
+    }
+    .breadcrumbs a {
+        color: #d1e2f7 !important;
+    }
+    .module h2, .module caption, .inline-group h2 {
+        background: #0f2c4d !important;
+        color: #ffffff !important;
+        font-weight: 600 !important;
+        letter-spacing: 0.5px;
+    }
+    div.breadcrumbs {
+        border-bottom: 1px solid rgba(255,255,255,0.08);
+    }
+    .button, input[type=submit], input[type=button], .submit-row input, a.button {
+        background: #0c3d70 !important;
+        border: none !important;
+        border-radius: 4px !important;
+        font-weight: 600 !important;
+        transition: background 0.2s ease-in-out;
+    }
+    .button:hover, input[type=submit]:hover {
+        background: #00c087 !important;
+        color: #ffffff !important;
+    }
+    .button.default, input[type=submit].default {
+        background: #009379 !important;
+    }
+    .button.default:hover, input[type=submit].default:hover {
+        background: #00b393 !important;
+    }
+    /* Clean Cards & Tables */
+    #content-main .module {
+        border-radius: 6px;
+        overflow: hidden;
+        border: 1px solid #d8e2ec;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+    }
+    #user-tools a {
+        border-bottom-color: rgba(255,255,255,0.4) !important;
+    }
+</style>
+{% endblock %}
