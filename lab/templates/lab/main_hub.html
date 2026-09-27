@@ -1,0 +1,79 @@
+{% extends "lab/base.html" %}
+
+{% block content %}
+<div class="mb-4">
+    <h2 class="fw-bold">Enterprise LIMS Control Hub</h2>
+    <p class="text-muted">Select an operational module to begin work:</p>
+</div>
+
+<!-- Navigation Module Cards -->
+<div class="row g-4 mb-5">
+    <div class="col-md-3">
+        <div class="card h-100 shadow-sm border-primary">
+            <div class="card-body">
+                <h5 class="card-title text-primary"><i class="bi bi-eyedropper me-2"></i>Sample Management</h5>
+                <p class="card-text text-muted small">Log new samples, enter analytical results, print barcodes, and download release CoAs.</p>
+                <a href="{% url 'sample_module' %}" class="btn btn-outline-primary btn-sm">Enter Module &rarr;</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card h-100 shadow-sm border-success">
+            <div class="card-body">
+                <h5 class="card-title text-success"><i class="bi bi-database-check me-2"></i>Master Data (MDM)</h5>
+                <p class="card-text text-muted small">Manage specification limits, analytical test methods, and acceptable ranges.</p>
+                <a href="{% url 'mdm_module' %}" class="btn btn-outline-success btn-sm">Enter Module &rarr;</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card h-100 shadow-sm border-info">
+            <div class="card-body">
+                <h5 class="card-title text-info"><i class="bi bi-cpu me-2"></i>Instruments & Calibrations</h5>
+                <p class="card-text text-muted small">Track HPLC, GC, and balances with calibration dates, status badges, and out-of-service locks.</p>
+                <a href="{% url 'instrument_module' %}" class="btn btn-outline-info btn-sm">Enter Module &rarr;</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card h-100 shadow-sm border-warning">
+            <div class="card-body">
+                <h5 class="card-title text-warning"><i class="bi bi-hourglass-split me-2"></i>Stability Management</h5>
+                <p class="card-text text-muted small">Manage stability chambers, automatic pull schedules (1M, 3M, 6M, 12M), and pulls.</p>
+                <a href="{% url 'stability_module' %}" class="btn btn-outline-warning btn-sm">Enter Module &rarr;</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Laboratory Health Metrics -->
+<h4 class="mb-3">Laboratory Status Overview</h4>
+<div class="row g-3">
+    <div class="col-md-3">
+        <div class="card p-3 border-0 bg-white shadow-sm">
+            <span class="text-muted small">Total Logged Samples</span>
+            <h3 class="mb-0 text-primary">{{ total_samples }}</h3>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card p-3 border-0 bg-white shadow-sm">
+            <span class="text-muted small">Out-of-Spec (OOS) Flags</span>
+            <h3 class="mb-0 text-danger">{{ oos_count }}</h3>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card p-3 border-0 bg-white shadow-sm">
+            <span class="text-muted small">Expired Instruments</span>
+            <h3 class="mb-0 {% if expired_instruments > 0 %}text-danger{% else %}text-success{% endif %}">
+                {{ expired_instruments }} / {{ instruments_total }}
+            </h3>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card p-3 border-0 bg-white shadow-sm">
+            <span class="text-muted small">Scheduled Stability Pulls</span>
+            <h3 class="mb-0 text-warning">{{ pending_pulls }}</h3>
+        </div>
+    </div>
+</div>
+{% endblock %}

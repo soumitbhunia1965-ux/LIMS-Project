@@ -1,0 +1,77 @@
+{% extends "lab/base.html" %}
+
+{% block content %}
+<div class="row">
+    <!-- Instruments List -->
+    <div class="col-md-8">
+        <div class="card shadow-sm border-0 p-3 mb-4">
+            <h4 class="fw-bold mb-3">Instrument Calibration & Qualification Inventory</h4>
+            <table class="table table-hover align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th>Instrument ID</th>
+                        <th>Name</th>
+                        <th>Calibrated Date</th>
+                        <th>Due Date</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for inst in instruments %}
+                    <tr>
+                        <td><strong>{{ inst.instrument_id }}</strong></td>
+                        <td>{{ inst.name }}</td>
+                        <td><small>{{ inst.last_calibrated }}</small></td>
+                        <td><small>{{ inst.calibration_due }}</small></td>
+                        <td>
+                            {% if inst.status == 'CALIBRATED' %}
+                                <span class="badge bg-success">Valid</span>
+                            {% elif inst.status == 'MAINTENANCE' %}
+                                <span class="badge bg-warning text-dark">Under Maintenance</span>
+                            {% else %}
+                                <span class="badge bg-danger">Calibration Expired</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="5" class="text-center py-3 text-muted">No instruments added.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Register Instrument -->
+    <div class="col-md-4">
+        <div class="card shadow-sm border-0 p-4">
+            <h5 class="fw-bold mb-3">+ Register Laboratory Instrument</h5>
+            <form method="POST">
+                {% csrf_token %}
+                <div class="mb-3">
+                    <label class="form-label">Instrument Tag / ID</label>
+                    <input type="text" name="instrument_id" class="form-control" placeholder="e.g. HPLC-01, GCMS-03" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Equipment Name</label>
+                    <input type="text" name="name" class="form-control" placeholder="e.g. Waters Alliance HPLC" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Model #</label>
+                    <input type="text" name="model_number" class="form-control" placeholder="e.g. e2695">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Last Calibrated Date</label>
+                    <input type="date" name="last_calibrated" class="form-control" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Calibration Expiry / Due Date</label>
+                    <input type="date" name="calibration_due" class="form-control" required>
+                </div>
+                <button type="submit" class="btn btn-info text-white w-100">Save Instrument</button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,96 @@
+{% extends "lab/base.html" %}
+
+{% block content %}
+<div class="row">
+    <!-- Active Studies & Pull Points -->
+    <div class="col-md-8">
+        <div class="card shadow-sm border-0 p-3 mb-4">
+            <h4 class="fw-bold mb-3">Active Stability Studies & Pull Schedules</h4>
+            {% for study in studies %}
+            <div class="border rounded p-3 mb-3 bg-white">
+                <div class="d-flex justify-content-between">
+                    <h5><strong>{{ study.study_code }}</strong> (Batch: {{ study.sample.batch_number }})</h5>
+                    <span class="badge bg-secondary">{{ study.storage_condition }}</span>
+                </div>
+                <p class="text-muted small mb-2">Protocol: {{ study.protocol_reference }} | Initiated: {{ study.start_date }}</p>
+                
+                <table class="table table-sm table-bordered mt-2">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Timepoint</th>
+                            <th>Scheduled Pull Date</th>
+                            <th>Status</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for tp in study.timepoints.all %}
+                        <tr>
+                            <td>{{ tp.interval_name }}</td>
+                            <td>{{ tp.scheduled_date }}</td>
+                            <td>
+                                {% if tp.status == 'PULLED' %}
+                                    <span class="badge bg-success">Pulled ({{ tp.actual_pull_date }})</span>
+                                {% else %}
+                                    <span class="badge bg-warning text-dark">Scheduled</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if tp.status == 'SCHEDULED' %}
+                                    <a href="{% url 'pull_timepoint' tp.id %}" class="btn btn-xs btn-outline-primary py-0">Mark Pulled</a>
+                                {% else %}
+                                    <span class="text-muted small">Completed</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% empty %}
+                <p class="text-muted text-center py-4">No stability protocols initiated yet.</p>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Create Stability Protocol -->
+    <div class="col-md-4">
+        <div class="card shadow-sm border-0 p-4">
+            <h5 class="fw-bold mb-3">+ Create Stability Protocol</h5>
+            <form method="POST">
+                {% csrf_token %}
+                <div class="mb-3">
+                    <label class="form-label">Study Code</label>
+                    <input type="text" name="study_code" class="form-control" placeholder="e.g. STAB-2026-001" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Assign Batch / Sample</label>
+                    <select name="sample_id" class="form-select" required>
+                        {% for s in samples %}
+                            <option value="{{ s.id }}">{{ s.barcode }} - {{ s.batch_number }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Storage Chamber Condition</label>
+                    <select name="storage_condition" class="form-select" required>
+                        <option value="25°C / 60% RH (Long Term)">25°C / 60% RH (Long Term)</option>
+                        <option value="30°C / 65% RH (Intermediate)">30°C / 65% RH (Intermediate)</option>
+                        <option value="40°C / 75% RH (Accelerated)">40°C / 75% RH (Accelerated)</option>
+                        <option value="5°C ± 3°C (Refrigerated)">5°C ± 3°C (Refrigerated)</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Protocol Reference</label>
+                    <input type="text" name="protocol_reference" class="form-control" placeholder="e.g. SOP-QC-STAB-014" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Study Start Date</label>
+                    <input type="date" name="start_date" class="form-control">
+                </div>
+                <button type="submit" class="btn btn-warning w-100">Generate Protocol & Schedule</button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

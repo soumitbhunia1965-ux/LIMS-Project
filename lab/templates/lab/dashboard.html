@@ -2,24 +2,36 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>LIMS - Analyst Dashboard</title>
+    <title>QC Lab Portal - Analyst Dashboard</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
 <body class="bg-light">
+
 <nav class="navbar navbar-dark bg-dark px-4 mb-4">
-    <span class="navbar-brand mb-0 h1 font-monospace">Pharma LIMS Portal</span>
+    <a class="navbar-brand mb-0 h1 font-monospace" href="{% url 'dashboard' %}">
+        QC Laboratory Portal
+    </a>
     <div class="d-flex align-items-center text-white">
         <span class="me-3">Analyst: <strong>{{ request.user.username }}</strong></span>
+        <a href="{% url 'batch_import' %}" class="btn btn-outline-info btn-sm me-2">📁 Import Instrument File</a>
         <a href="/admin/" class="btn btn-outline-light btn-sm">Admin Panel</a>
     </div>
 </nav>
 
 <div class="container my-3">
+    {% if messages %}
+        {% for message in messages %}
+            <div class="alert alert-success alert-dismissible fade show" role="alert">
+                {{ message }}
+            </div>
+        {% endfor %}
+    {% endif %}
+
     <div class="row g-3 mb-4">
         <div class="col-md-4">
             <div class="card p-3 border-primary shadow-sm">
                 <h6 class="text-muted">Total Samples</h6>
-                <h3 class="mb-0">{{ total_samples }}</h3>
+                <h3 class="mb-0 text-primary">{{ total_samples }}</h3>
             </div>
         </div>
         <div class="col-md-4">
@@ -38,7 +50,10 @@
 
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h4>Recent Samples</h4>
-        <a href="{% url 'sample_entry' %}" class="btn btn-primary">+ Log New Sample</a>
+        <div>
+            <a href="{% url 'batch_import' %}" class="btn btn-outline-primary me-2">Batch Import</a>
+            <a href="{% url 'sample_entry' %}" class="btn btn-primary">+ Log New Sample</a>
+        </div>
     </div>
 
     <div class="card shadow-sm border-0">
@@ -50,6 +65,7 @@
                     <th>Batch</th>
                     <th>Status</th>
                     <th>Barcode Label</th>
+                    <th>CoA Report</th>
                     <th>Actions</th>
                 </tr>
             </thead>
@@ -59,10 +75,26 @@
                     <td><strong>{{ sample.barcode }}</strong></td>
                     <td>{{ sample.sample_type }}</td>
                     <td>{{ sample.batch_number }}</td>
-                    <td><span class="badge bg-secondary">{{ sample.status }}</span></td>
                     <td>
-                        <a href="{% url 'barcode_image' sample.barcode %}" target="_blank" class="btn btn-sm btn-outline-secondary">
-                            ??? View Barcode
+                        {% if sample.overall_status == 'PASSED' %}
+                            <span class="badge bg-success">PASSED</span>
+                        {% elif sample.overall_status == 'OOS' %}
+                            <span class="badge bg-danger">OOS</span>
+                        {% else %}
+                            <span class="badge bg-secondary">{{ sample.status }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <a href="{% url 'barcode_image' sample.barcode %}" target="_blank" class="btn btn-sm btn-outline-dark d-inline-flex align-items-center gap-1">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                                <path d="M1.5 1a.5.5 0 0 0-.5.5v3a.5.5 0 0 1-1 0v-3A1.5 1.5 0 0 1 1.5 0h3a.5.5 0 0 1 0 1zM11 .5a.5.5 0 0 1 .5-.5h3A1.5 1.5 0 0 1 16 1.5v3a.5.5 0 0 1-1 0v-3a.5.5 0 0 0-.5-.5h-3a.5.5 0 0 1-.5-.5M.5 11a.5.5 0 0 1 .5.5v3a.5.5 0 0 0 .5.5h3a.5.5 0 0 1 0 1h-3A1.5 1.5 0 0 1 0 14.5v-3a.5.5 0 0 1 .5-.5m15 0a.5.5 0 0 1 .5.5v3a1.5 1.5 0 0 1-1.5 1.5h-3a.5.5 0 0 1 0-1h3a.5.5 0 0 0 .5-.5v-3a.5.5 0 0 1 .5-.5M3 4.5a.5.5 0 0 1 1 0v7a.5.5 0 0 1-1 0zm2 0a.5.5 0 0 1 1 0v7a.5.5 0 0 1-1 0zm3 0a.5.5 0 0 1 1 0v7a.5.5 0 0 1-1 0zm3 0a.5.5 0 0 1 1 0v7a.5.5 0 0 1-1 0zm2 0a.5.5 0 0 1 1 0v7a.5.5 0 0 1-1 0z"/>
+                            </svg>
+                            View Barcode
+                        </a>
+                    </td>
+                    <td>
+                        <a href="{% url 'generate_coa' sample.id %}" target="_blank" class="btn btn-sm btn-outline-danger">
+                            📄 Download CoA
                         </a>
                     </td>
                     <td>
@@ -73,8 +105,8 @@
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="6" class="text-center py-4 text-muted">
-                        No samples logged yet. Click "+ Log New Sample" above to add one.
+                    <td colspan="7" class="text-center py-4 text-muted">
+                        No samples logged yet.
                     </td>
                 </tr>
                 {% endfor %}

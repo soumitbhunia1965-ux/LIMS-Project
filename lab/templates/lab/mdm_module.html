@@ -1,0 +1,65 @@
+{% extends "lab/base.html" %}
+
+{% block content %}
+<div class="row">
+    <!-- List of Existing Specs -->
+    <div class="col-md-7">
+        <div class="card shadow-sm border-0 p-3 mb-4">
+            <h4 class="fw-bold mb-3">Analytical Test Specifications (MDM)</h4>
+            <table class="table table-sm table-hover align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th>Test Parameter</th>
+                        <th>Unit</th>
+                        <th>Min Spec</th>
+                        <th>Max Spec</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for test in tests %}
+                    <tr>
+                        <td><strong>{{ test.name }}</strong></td>
+                        <td>{{ test.unit }}</td>
+                        <td>{{ test.min_limit|default:"-∞" }}</td>
+                        <td>{{ test.max_limit|default:"+∞" }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="4" class="text-center py-3 text-muted">No specifications defined yet.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Create New Spec -->
+    <div class="col-md-5">
+        <div class="card shadow-sm border-0 p-4">
+            <h5 class="fw-bold mb-3">+ Register New Test Specification</h5>
+            <form method="POST">
+                {% csrf_token %}
+                <div class="mb-3">
+                    <label class="form-label">Test Parameter Name</label>
+                    <input type="text" name="name" class="form-control" placeholder="e.g. Assay, Dissolution, pH" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Unit of Measure</label>
+                    <input type="text" name="unit" class="form-control" placeholder="e.g. %, mg/mL, pH units" required>
+                </div>
+                <div class="row mb-3">
+                    <div class="col">
+                        <label class="form-label">Min Limit</label>
+                        <input type="number" step="any" name="min_limit" class="form-control" placeholder="-∞">
+                    </div>
+                    <div class="col">
+                        <label class="form-label">Max Limit</label>
+                        <input type="number" step="any" name="max_limit" class="form-control" placeholder="+∞">
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-success w-100">Save Specification</button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

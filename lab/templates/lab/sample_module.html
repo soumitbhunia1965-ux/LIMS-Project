@@ -1,0 +1,86 @@
+{% extends "lab/base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h3 class="fw-bold mb-0">Sample Management Module</h3>
+        <p class="text-muted small">Worklist, sample registration, testing execution, and CoA releases.</p>
+    </div>
+    <a href="{% url 'sample_entry' %}" class="btn btn-primary"><i class="bi bi-plus-lg me-1"></i>Log New Sample</a>
+</div>
+
+<!-- Filter & Search Bar -->
+<div class="card p-3 shadow-sm mb-4 border-0">
+    <form method="GET" class="row g-2 align-items-center">
+        <div class="col-md-4">
+            <input type="text" name="q" value="{{ query }}" class="form-control form-control-sm" placeholder="Search by Barcode or Batch #">
+        </div>
+        <div class="col-md-3">
+            <select name="status" class="form-select form-select-sm">
+                <option value="">All Statuses</option>
+                <option value="LOGGED" {% if status_filter == 'LOGGED' %}selected{% endif %}>Logged</option>
+                <option value="IN_PROGRESS" {% if status_filter == 'IN_PROGRESS' %}selected{% endif %}>In Progress</option>
+                <option value="COMPLETED" {% if status_filter == 'COMPLETED' %}selected{% endif %}>Completed</option>
+            </select>
+        </div>
+        <div class="col-md-2">
+            <button type="submit" class="btn btn-sm btn-dark w-100">Filter</button>
+        </div>
+    </form>
+</div>
+
+<div class="card shadow-sm border-0">
+    <table class="table table-hover align-middle mb-0">
+        <thead class="table-light">
+            <tr>
+                <th>Barcode</th>
+                <th>Type</th>
+                <th>Batch #</th>
+                <th>Received At</th>
+                <th>Status</th>
+                <th>Label</th>
+                <th>CoA</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for sample in samples %}
+            <tr>
+                <td><strong>{{ sample.barcode }}</strong></td>
+                <td>{{ sample.sample_type }}</td>
+                <td>{{ sample.batch_number }}</td>
+                <td><small>{{ sample.received_at|date:"Y-m-d H:i" }}</small></td>
+                <td>
+                    {% if sample.overall_status == 'PASSED' %}
+                        <span class="badge bg-success">PASSED</span>
+                    {% elif sample.overall_status == 'OOS' %}
+                        <span class="badge bg-danger">OOS</span>
+                    {% else %}
+                        <span class="badge bg-secondary">{{ sample.status }}</span>
+                    {% endif %}
+                </td>
+                <td>
+                    <a href="{% url 'barcode_image' sample.barcode %}" target="_blank" class="btn btn-sm btn-outline-dark">
+                        <i class="bi bi-upc-scan me-1"></i>Barcode
+                    </a>
+                </td>
+                <td>
+                    <a href="{% url 'generate_coa' sample.id %}" target="_blank" class="btn btn-sm btn-outline-danger">
+                        <i class="bi bi-file-earmark-pdf me-1"></i>CoA
+                    </a>
+                </td>
+                <td>
+                    <a href="{% url 'enter_results' sample.id %}" class="btn btn-sm btn-success">
+                        Enter / Review
+                    </a>
+                </td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="8" class="text-center py-4 text-muted">No samples matched your search.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

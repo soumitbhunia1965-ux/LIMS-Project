@@ -1,15 +1,10 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Enter Test Results - LIMS</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-</head>
-<body class="bg-light p-4">
-<div class="container" style="max-width: 720px;">
-    <div class="card shadow-sm p-4">
+{% extends "lab/base.html" %}
+
+{% block content %}
+<div class="container" style="max-width: 850px;">
+    <div class="card shadow-sm p-4 mb-4">
         <h4>Analytical Results Entry</h4>
-        <p class="text-muted mb-3">
+        <p class="text-muted mb-2">
             Sample: <strong>{{ sample.barcode }}</strong> | Type: <strong>{{ sample.sample_type }}</strong> | Batch: <strong>{{ sample.batch_number }}</strong>
         </p>
         <hr>
@@ -17,28 +12,70 @@
             {% csrf_token %}
             {% for test in tests %}
             <div class="mb-3 row align-items-center">
-                <label class="col-sm-6 col-form-label">
+                <label class="col-sm-4 col-form-label">
                     <span class="fw-semibold">{{ test.name }}</span> ({{ test.unit }})
-                    <br><small class="text-muted">Acceptance Limits: {{ test.min_limit|default:"-8" }} to {{ test.max_limit|default:"+8" }}</small>
+                    <br><small class="text-muted">Spec: {{ test.min_limit|default:"-∞" }} to {{ test.max_limit|default:"+∞" }}</small>
                 </label>
-                <div class="col-sm-6">
+                <div class="col-sm-4">
                     <input type="number" step="any" class="form-control" name="test_{{ test.id }}"
-                           value="{% for tid, val in existing_results.items %}{% if tid == test.id %}{{ val }}{% endif %}{% endfor %}"
-                           placeholder="Enter numeric value">
+                           value="{% for tid, r in existing_results.items %}{% if tid == test.id %}{{ r.numeric_value }}{% endif %}{% endfor %}"
+                           placeholder="Enter result">
+                </div>
+                <div class="col-sm-4">
+                    <select name="instrument_{{ test.id }}" class="form-select form-select-sm">
+                        <option value="">Manual / No Instrument</option>
+                        {% for inst in instruments %}
+                            <option value="{{ inst.id }}">{{ inst.instrument_id }} ({{ inst.name }})</option>
+                        {% endfor %}
+                    </select>
                 </div>
             </div>
-            {% empty %}
-            <div class="alert alert-warning">
-                No test definitions registered in the system yet. Add test specifications first in the <a href="/admin/lab/testdefinition/add/" target="_blank">Admin Panel</a>.
-            </div>
             {% endfor %}
-            
+
+            <!-- 21 CFR Part 11 Electronic Reason -->
+            <div class="mt-3 p-3 bg-light border rounded">
+                <label class="form-label fw-bold">Reason for Change / Entry (21 CFR Part 11):</label>
+                <input type="text" name="reason_for_change" class="form-control" placeholder="e.g. Initial test run / Re-testing due to investigation" required>
+            </div>
+
             <div class="d-flex justify-content-between mt-4">
-                <a href="{% url 'dashboard' %}" class="btn btn-secondary">Back to Worklist</a>
+                <a href="{% url 'sample_module' %}" class="btn btn-secondary">Back to Samples</a>
                 <button type="submit" class="btn btn-success">Save Results & Auto-Evaluate</button>
             </div>
         </form>
     </div>
+
+    <!-- 21 CFR Part 11 Audit Trail Table -->
+    <div class="card shadow-sm p-4">
+        <h5 class="mb-3">Audit Trail History</h5>
+        <table class="table table-sm table-striped">
+            <thead>
+                <tr>
+                    <th>Timestamp</th>
+                    <th>Test</th>
+                    <th>Old Value</th>
+                    <th>New Value</th>
+                    <th>Analyst</th>
+                    <th>Reason</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for log in audit_logs %}
+                <tr>
+                    <td><small>{{ log.timestamp|date:"Y-m-d H:i:s" }}</small></td>
+                    <td>{{ log.test_name }}</td>
+                    <td>{{ log.old_value }}</td>
+                    <td><strong>{{ log.new_value }}</strong></td>
+                    <td>{{ log.performed_by.username }}</td>
+                    <td><small>{{ log.reason }}</small></td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="6" class="text-center text-muted">No audit trail records yet.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
 </div>
-</body>
-</html>
+{% endblock %}
