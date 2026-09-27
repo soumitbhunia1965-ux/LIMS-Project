@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>LIMS - Analyst Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+<nav class="navbar navbar-dark bg-dark px-4 mb-4">
+    <span class="navbar-brand mb-0 h1 font-monospace">Pharma LIMS Portal</span>
+    <div class="d-flex align-items-center text-white">
+        <span class="me-3">Analyst: <strong>{{ request.user.username }}</strong></span>
+        <a href="/admin/" class="btn btn-outline-light btn-sm">Admin Panel</a>
+    </div>
+</nav>
+
+<div class="container my-3">
+    <div class="row g-3 mb-4">
+        <div class="col-md-4">
+            <div class="card p-3 border-primary shadow-sm">
+                <h6 class="text-muted">Total Samples</h6>
+                <h3 class="mb-0">{{ total_samples }}</h3>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card p-3 border-warning shadow-sm">
+                <h6 class="text-muted">Pending Tests</h6>
+                <h3 class="mb-0 text-warning">{{ pending_tests }}</h3>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card p-3 border-danger shadow-sm">
+                <h6 class="text-muted">Out-of-Spec (OOS)</h6>
+                <h3 class="mb-0 text-danger">{{ oos_count }}</h3>
+            </div>
+        </div>
+    </div>
+
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h4>Recent Samples</h4>
+        <a href="{% url 'sample_entry' %}" class="btn btn-primary">+ Log New Sample</a>
+    </div>
+
+    <div class="card shadow-sm border-0">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>Barcode</th>
+                    <th>Sample Type</th>
+                    <th>Batch</th>
+                    <th>Status</th>
+                    <th>Barcode Label</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for sample in samples %}
+                <tr>
+                    <td><strong>{{ sample.barcode }}</strong></td>
+                    <td>{{ sample.sample_type }}</td>
+                    <td>{{ sample.batch_number }}</td>
+                    <td><span class="badge bg-secondary">{{ sample.status }}</span></td>
+                    <td>
+                        <a href="{% url 'barcode_image' sample.barcode %}" target="_blank" class="btn btn-sm btn-outline-secondary">
+                            ??? View Barcode
+                        </a>
+                    </td>
+                    <td>
+                        <a href="{% url 'enter_results' sample.id %}" class="btn btn-sm btn-success">
+                            Enter / Review Results
+                        </a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="6" class="text-center py-4 text-muted">
+                        No samples logged yet. Click "+ Log New Sample" above to add one.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+</body>
+</html>
