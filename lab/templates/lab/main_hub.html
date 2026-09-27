@@ -1,78 +1,188 @@
 {% extends "lab/base.html" %}
+{% load static %}
 
 {% block content %}
-<div class="mb-4">
-    <h2 class="fw-bold">Enterprise LIMS Control Hub</h2>
-    <p class="text-muted">Select an operational module to begin work:</p>
+<!-- Deep Teal/Navy Laboratory Hero Banner -->
+<div class="p-4 p-md-5 mb-4 rounded-3 text-white shadow" style="background: linear-gradient(135deg, #071b30 0%, #0c335e 55%, #026b54 100%);">
+    <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
+        <div class="col-lg-8">
+            <h1 class="display-6 fw-bold mb-2 text-white">Integrated Quality Control LIMS</h1>
+            <p class="lead mb-0" style="color: #dbe7f5; font-size: 1.05rem;">
+                Compliant Enterprise Portal for Analytical Testing, Stability Protocols, Instrument Calibration, and Real-Time Equipment Interfacing.
+            </p>
+        </div>
+        <div class="d-none d-md-block">
+            <img src="{% static 'lab/lims_logo.png' %}" alt="LIMS Logo" style="height: 105px; filter: drop-shadow(0 4px 10px rgba(0,0,0,0.4));" class="bg-white p-2 rounded-3">
+        </div>
+    </div>
 </div>
 
-<!-- Navigation Module Cards -->
+<!-- 6 Operational Modules (Deep Colored Cards) -->
+<h4 class="fw-bold mb-3" style="color: #0b223d;">
+    <i class="bi bi-grid-fill me-2 text-primary"></i>Operational Laboratory Modules
+</h4>
+
 <div class="row g-4 mb-5">
-    <div class="col-md-3">
-        <div class="card h-100 shadow-sm border-primary">
-            <div class="card-body">
-                <h5 class="card-title text-primary"><i class="bi bi-eyedropper me-2"></i>Sample Management</h5>
-                <p class="card-text text-muted small">Log new samples, enter analytical results, print barcodes, and download release CoAs.</p>
-                <a href="{% url 'sample_module' %}" class="btn btn-outline-primary btn-sm">Enter Module &rarr;</a>
+    <!-- 1. Sample Management -->
+    <div class="col-md-4">
+        <div class="card h-100 shadow-sm border-0 border-top border-4" style="border-top-color: #0d6efd !important;">
+            <div class="card-body p-4 d-flex flex-column justify-content-between">
+                <div>
+                    <div class="d-flex align-items-center mb-2">
+                        <div class="rounded-circle p-2 me-3" style="background: #e7f1ff;">
+                            <i class="bi bi-eyedropper fs-4 text-primary"></i>
+                        </div>
+                        <h5 class="card-title mb-0 fw-bold" style="color: #0d2c54;">Sample Management</h5>
+                    </div>
+                    <p class="card-text text-secondary small mt-3">
+                        Register samples, record analytical results, evaluate OOS triggers, print barcodes, and generate Certificate of Analysis (CoA) reports.
+                    </p>
+                </div>
+                <a href="{% url 'sample_module' %}" class="btn btn-primary fw-semibold mt-3 w-100">
+                    Open Module &rarr;
+                </a>
             </div>
         </div>
     </div>
-    <div class="col-md-3">
-        <div class="card h-100 shadow-sm border-success">
-            <div class="card-body">
-                <h5 class="card-title text-success"><i class="bi bi-database-check me-2"></i>Master Data (MDM)</h5>
-                <p class="card-text text-muted small">Manage specification limits, analytical test methods, and acceptable ranges.</p>
-                <a href="{% url 'mdm_module' %}" class="btn btn-outline-success btn-sm">Enter Module &rarr;</a>
+
+    <!-- 2. Master Data Management -->
+    <div class="col-md-4">
+        <div class="card h-100 shadow-sm border-0 border-top border-4" style="border-top-color: #198754 !important;">
+            <div class="card-body p-4 d-flex flex-column justify-content-between">
+                <div>
+                    <div class="d-flex align-items-center mb-2">
+                        <div class="rounded-circle p-2 me-3" style="background: #e8f7ee;">
+                            <i class="bi bi-database-check fs-4 text-success"></i>
+                        </div>
+                        <h5 class="card-title mb-0 fw-bold" style="color: #0e3b24;">Master Data (MDM)</h5>
+                    </div>
+                    <p class="card-text text-secondary small mt-3">
+                        Maintain product specifications, analytical parameters (Assay, Dissolution, pH), acceptable limits, and measurement units.
+                    </p>
+                </div>
+                <a href="{% url 'mdm_module' %}" class="btn btn-success fw-semibold mt-3 w-100">
+                    Open Module &rarr;
+                </a>
             </div>
         </div>
     </div>
-    <div class="col-md-3">
-        <div class="card h-100 shadow-sm border-info">
-            <div class="card-body">
-                <h5 class="card-title text-info"><i class="bi bi-cpu me-2"></i>Instruments & Calibrations</h5>
-                <p class="card-text text-muted small">Track HPLC, GC, and balances with calibration dates, status badges, and out-of-service locks.</p>
-                <a href="{% url 'instrument_module' %}" class="btn btn-outline-info btn-sm">Enter Module &rarr;</a>
+
+    <!-- 3. Instrument Calibration -->
+    <div class="col-md-4">
+        <div class="card h-100 shadow-sm border-0 border-top border-4" style="border-top-color: #0dcaf0 !important;">
+            <div class="card-body p-4 d-flex flex-column justify-content-between">
+                <div>
+                    <div class="d-flex align-items-center mb-2">
+                        <div class="rounded-circle p-2 me-3" style="background: #e3f9fc;">
+                            <i class="bi bi-cpu fs-4 text-info"></i>
+                        </div>
+                        <h5 class="card-title mb-0 fw-bold" style="color: #083b44;">Instruments & Calibration</h5>
+                    </div>
+                    <p class="card-text text-secondary small mt-3">
+                        Track calibration schedules, prevent test assignment to expired equipment, and monitor qualification lifecycles.
+                    </p>
+                </div>
+                <a href="{% url 'instrument_module' %}" class="btn btn-info text-white fw-semibold mt-3 w-100">
+                    Open Module &rarr;
+                </a>
             </div>
         </div>
     </div>
-    <div class="col-md-3">
-        <div class="card h-100 shadow-sm border-warning">
-            <div class="card-body">
-                <h5 class="card-title text-warning"><i class="bi bi-hourglass-split me-2"></i>Stability Management</h5>
-                <p class="card-text text-muted small">Manage stability chambers, automatic pull schedules (1M, 3M, 6M, 12M), and pulls.</p>
-                <a href="{% url 'stability_module' %}" class="btn btn-outline-warning btn-sm">Enter Module &rarr;</a>
+
+    <!-- 4. Stability Management -->
+    <div class="col-md-4">
+        <div class="card h-100 shadow-sm border-0 border-top border-4" style="border-top-color: #fd7e14 !important;">
+            <div class="card-body p-4 d-flex flex-column justify-content-between">
+                <div>
+                    <div class="d-flex align-items-center mb-2">
+                        <div class="rounded-circle p-2 me-3" style="background: #fff3e8;">
+                            <i class="bi bi-hourglass-split fs-4 text-warning" style="color: #fd7e14 !important;"></i>
+                        </div>
+                        <h5 class="card-title mb-0 fw-bold" style="color: #4d2600;">Stability Management</h5>
+                    </div>
+                    <p class="card-text text-secondary small mt-3">
+                        Manage stability chambers (25°C/60% RH, 40°C/75% RH), auto-schedule pull intervals (1M, 3M, 6M, 12M), and execute pulls.
+                    </p>
+                </div>
+                <a href="{% url 'stability_module' %}" class="btn text-white fw-semibold mt-3 w-100" style="background-color: #fd7e14;">
+                    Open Module &rarr;
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- 5. Instrument / Interface Connector (NEW) -->
+    <div class="col-md-4">
+        <div class="card h-100 shadow-sm border-0 border-top border-4" style="border-top-color: #6f42c1 !important;">
+            <div class="card-body p-4 d-flex flex-column justify-content-between">
+                <div>
+                    <div class="d-flex align-items-center mb-2">
+                        <div class="rounded-circle p-2 me-3" style="background: #f1ecfa;">
+                            <i class="bi bi-router fs-4 text-purple" style="color: #6f42c1;"></i>
+                        </div>
+                        <h5 class="card-title mb-0 fw-bold" style="color: #31135e;">Instrument Connector</h5>
+                    </div>
+                    <p class="card-text text-secondary small mt-3">
+                        Direct interfacing with HPLC, GC, UPLC, Balances, pH Meters, TOC, and ELN via RS-232, TCP/IP, or REST webhooks.
+                    </p>
+                </div>
+                <a href="{% url 'connector_module' %}" class="btn text-white fw-semibold mt-3 w-100" style="background-color: #6f42c1;">
+                    Open Module &rarr;
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- 6. Universal Compliance Audit Trail (NEW) -->
+    <div class="col-md-4">
+        <div class="card h-100 shadow-sm border-0 border-top border-4" style="border-top-color: #20c997 !important;">
+            <div class="card-body p-4 d-flex flex-column justify-content-between">
+                <div>
+                    <div class="d-flex align-items-center mb-2">
+                        <div class="rounded-circle p-2 me-3" style="background: #e8f9f4;">
+                            <i class="bi bi-journal-text fs-4" style="color: #20c997;"></i>
+                        </div>
+                        <h5 class="card-title mb-0 fw-bold" style="color: #0b4533;">Audit Trail Ledger</h5>
+                    </div>
+                    <p class="card-text text-secondary small mt-3">
+                        21 CFR Part 11 compliant audit trail capturing all changes, previous vs. new values, timestamps, reasons, and electronic signatures.
+                    </p>
+                </div>
+                <a href="{% url 'audit_explorer' %}" class="btn text-white fw-semibold mt-3 w-100" style="background-color: #20c997;">
+                    Open Module &rarr;
+                </a>
             </div>
         </div>
     </div>
 </div>
 
-<!-- Laboratory Health Metrics -->
-<h4 class="mb-3">Laboratory Status Overview</h4>
+<!-- Laboratory Health Metrics / KPIs -->
+<h4 class="fw-bold mb-3" style="color: #0b223d;">
+    <i class="bi bi-bar-chart-fill me-2 text-primary"></i>Laboratory Key Performance Indicators
+</h4>
 <div class="row g-3">
     <div class="col-md-3">
-        <div class="card p-3 border-0 bg-white shadow-sm">
-            <span class="text-muted small">Total Logged Samples</span>
-            <h3 class="mb-0 text-primary">{{ total_samples }}</h3>
+        <div class="card p-3 border-0 bg-white shadow-sm border-start border-4 border-primary">
+            <span class="text-secondary small fw-bold text-uppercase">Total Samples</span>
+            <h3 class="mb-0 text-primary fw-bold mt-1">{{ total_samples }}</h3>
         </div>
     </div>
     <div class="col-md-3">
-        <div class="card p-3 border-0 bg-white shadow-sm">
-            <span class="text-muted small">Out-of-Spec (OOS) Flags</span>
-            <h3 class="mb-0 text-danger">{{ oos_count }}</h3>
+        <div class="card p-3 border-0 bg-white shadow-sm border-start border-4 border-warning">
+            <span class="text-secondary small fw-bold text-uppercase">Under Technical Review</span>
+            <h3 class="mb-0 text-warning fw-bold mt-1">{{ under_review_count|default:"0" }}</h3>
         </div>
     </div>
     <div class="col-md-3">
-        <div class="card p-3 border-0 bg-white shadow-sm">
-            <span class="text-muted small">Expired Instruments</span>
-            <h3 class="mb-0 {% if expired_instruments > 0 %}text-danger{% else %}text-success{% endif %}">
-                {{ expired_instruments }} / {{ instruments_total }}
-            </h3>
+        <div class="card p-3 border-0 bg-white shadow-sm border-start border-4 border-danger">
+            <span class="text-secondary small fw-bold text-uppercase">Active OOS Investigations</span>
+            <h3 class="mb-0 text-danger fw-bold mt-1">{{ oos_investigations|default:"0" }}</h3>
         </div>
     </div>
     <div class="col-md-3">
-        <div class="card p-3 border-0 bg-white shadow-sm">
-            <span class="text-muted small">Scheduled Stability Pulls</span>
-            <h3 class="mb-0 text-warning">{{ pending_pulls }}</h3>
+        <div class="card p-3 border-0 bg-white shadow-sm border-start border-4 border-info">
+            <span class="text-secondary small fw-bold text-uppercase">Pending Stability Pulls</span>
+            <h3 class="mb-0 text-info fw-bold mt-1">{{ pending_pulls }}</h3>
         </div>
     </div>
 </div>

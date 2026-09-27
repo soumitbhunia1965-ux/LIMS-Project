@@ -1,61 +1,135 @@
+{% load static %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}QC Laboratory Portal{% endblock %}</title>
+    <!-- Bootstrap 5 & Bootstrap Icons -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
     <style>
-        .nav-link.active { font-weight: bold; border-bottom: 2px solid #0d6efd; color: #fff !important; }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            background-color: #f0f3f8;
+            font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+            color: #1a2536;
+            margin: 0;
+            padding: 0;
+        }
+        /* Deep High-Contrast Navy Navigation */
+        .navbar-custom {
+            background: #071527;
+            border-bottom: 2px solid #00c087;
+            padding: 0.65rem 1.5rem;
+        }
+        .navbar-brand {
+            font-size: 1.15rem;
+            color: #ffffff !important;
+            font-weight: 700;
+        }
+        .nav-link {
+            color: #c9d6e8 !important;
+            font-weight: 500;
+            font-size: 0.92rem;
+            padding: 0.5rem 0.85rem !important;
+            border-radius: 4px;
+            transition: all 0.2s ease-in-out;
+        }
+        .nav-link:hover {
+            color: #ffffff !important;
+            background-color: rgba(255, 255, 255, 0.12);
+        }
+        .nav-link.active {
+            color: #ffffff !important;
+            background-color: #0d6efd;
+            font-weight: 700;
+        }
+        .badge-user {
+            background: rgba(255, 255, 255, 0.15);
+            padding: 0.4rem 0.8rem;
+            border-radius: 20px;
+            color: #ffffff;
+            font-size: 0.9rem;
+        }
     </style>
 </head>
-<body class="bg-light">
+<body>
 
-<!-- Top Navigation Bar for All Modules -->
-<nav class="navbar navbar-expand-lg navbar-dark bg-dark px-4 shadow-sm mb-4">
-    <a class="navbar-brand font-monospace me-4" href="{% url 'main_hub' %}">
-        <i class="bi bi-boxes me-2"></i>QC LIMS Portal
-    </a>
-    <div class="collapse navbar-collapse">
-        <ul class="navbar-nav me-auto mb-2 mb-lg-0">
-            <li class="nav-item">
-                <a class="nav-link {% if request.resolver_match.url_name == 'main_hub' %}active{% endif %}" href="{% url 'main_hub' %}">
-                    <i class="bi bi-speedometer2 me-1"></i>Portal Hub
+<!-- Deep Navy Fixed Top Navbar -->
+<nav class="navbar navbar-expand-xl navbar-dark navbar-custom shadow sticky-top">
+    <div class="container-fluid px-2">
+        <a class="navbar-brand d-flex align-items-center me-3" href="{% url 'main_hub' %}">
+            <img src="{% static 'lab/lims_logo.png' %}" alt="LIMS" height="34" class="me-2 rounded bg-white p-1">
+            <span>QC LIMS Portal</span>
+        </a>
+
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#portalNav">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+
+        <div class="collapse navbar-collapse" id="portalNav">
+            <ul class="navbar-nav me-auto mb-2 mb-xl-0">
+                <li class="nav-item">
+                    <a class="nav-link {% if request.resolver_match.url_name == 'main_hub' %}active{% endif %}" href="{% url 'main_hub' %}">
+                        <i class="bi bi-speedometer2 me-1"></i>Portal Hub
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link {% if 'sample' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'sample_module' %}">
+                        <i class="bi bi-eyedropper me-1"></i>Sample Management
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link {% if 'mdm' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'mdm_module' %}">
+                        <i class="bi bi-database-check me-1"></i>Master Data (MDM)
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link {% if 'instrument' in request.resolver_match.url_name and 'connector' not in request.resolver_match.url_name %}active{% endif %}" href="{% url 'instrument_module' %}">
+                        <i class="bi bi-cpu me-1"></i>Instruments & Calibration
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link {% if 'stability' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'stability_module' %}">
+                        <i class="bi bi-hourglass-split me-1"></i>Stability Module
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link {% if 'connector' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'connector_module' %}">
+                        <i class="bi bi-router me-1"></i>Instrument Connector
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link {% if 'audit' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'audit_explorer' %}">
+                        <i class="bi bi-journal-text me-1"></i>Audit Trail
+                    </a>
+                </li>
+            </ul>
+
+            <div class="d-flex align-items-center gap-2">
+                <span class="badge-user">
+                    <i class="bi bi-person-fill text-info me-1"></i>{{ request.user.username }}
+                </span>
+                <a href="/admin/" class="btn btn-warning btn-sm fw-bold px-3" target="_blank">
+                    <i class="bi bi-gear-fill me-1"></i>Admin Module
                 </a>
-            </li>
-            <li class="nav-item">
-                <a class="nav-link {% if 'sample' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'sample_module' %}">
-                    <i class="bi bi-eyedropper me-1"></i>Sample Management
-                </a>
-            </li>
-            <li class="nav-item">
-                <a class="nav-link {% if 'mdm' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'mdm_module' %}">
-                    <i class="bi bi-database-check me-1"></i>Master Data (MDM)
-                </a>
-            </li>
-            <li class="nav-item">
-                <a class="nav-link {% if 'instrument' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'instrument_module' %}">
-                    <i class="bi bi-cpu me-1"></i>Instruments & Calibration
-                </a>
-            </li>
-            <li class="nav-item">
-                <a class="nav-link {% if 'stability' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'stability_module' %}">
-                    <i class="bi bi-hourglass-split me-1"></i>Stability Module
-                </a>
-            </li>
-        </ul>
-        <div class="d-flex align-items-center text-white">
-            <span class="me-3"><i class="bi bi-person-circle me-1"></i>{{ request.user.username }}</span>
-            <a href="/admin/" class="btn btn-outline-warning btn-sm" target="_blank">Admin Module</a>
+            </div>
         </div>
     </div>
 </nav>
 
-<div class="container-fluid px-4 mb-5">
+<!-- Page Content -->
+<div class="container-fluid px-4 py-4">
     {% if messages %}
         {% for message in messages %}
-            <div class="alert alert-info alert-dismissible fade show" role="alert">
-                {{ message }}
+            <div class="alert alert-info alert-dismissible fade show shadow-sm border-0" role="alert">
+                <i class="bi bi-info-circle-fill me-2"></i>{{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
             </div>
         {% endfor %}
     {% endif %}

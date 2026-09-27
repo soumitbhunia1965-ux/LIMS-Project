@@ -1,0 +1,49 @@
+{% extends "lab/base.html" %}
+
+{% block content %}
+<div class="container" style="max-width: 720px;">
+    <div class="card shadow-sm p-4 border-0">
+        <h4 class="fw-bold mb-3"><i class="bi bi-shield-check me-2 text-primary"></i>Technical Peer Review</h4>
+        <p class="text-muted">Review sample <strong>{{ sample.barcode }}</strong> (Batch: {{ sample.batch_number }}) registered by <strong>{{ sample.logged_by.username }}</strong>.</p>
+        
+        <table class="table table-sm table-bordered mb-4">
+            <thead class="table-light">
+                <tr><th>Test Parameter</th><th>Specification</th><th>Observed Value</th><th>Status</th></tr>
+            </thead>
+            <tbody>
+                {% for r in sample.results.all %}
+                <tr>
+                    <td>{{ r.test.name }}</td>
+                    <td>{{ r.test.min_limit }} - {{ r.test.max_limit }} {{ r.test.unit }}</td>
+                    <td><strong>{{ r.numeric_value }} {{ r.test.unit }}</strong></td>
+                    <td><span class="badge {% if r.status == 'PASSED' %}bg-success{% else %}bg-danger{% endif %}">{{ r.status }}</span></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <form method="POST">
+            {% csrf_token %}
+            <div class="mb-3">
+                <label class="form-label fw-bold">Reviewer Verification Comments:</label>
+                <textarea name="review_notes" class="form-control" rows="2" placeholder="Confirmed raw spectra, chromatography integrations, and balance printouts." required></textarea>
+            </div>
+
+            <!-- 21 CFR Part 11 Electronic Signature Box -->
+            <div class="p-3 bg-light border rounded mb-3">
+                <h6 class="fw-bold text-dark"><i class="bi bi-key-fill me-1 text-warning"></i>21 CFR Part 11 Electronic Signature Manifestation</h6>
+                <p class="small text-muted mb-2">By providing credentials, you certify: <em>"I have reviewed the analytical data and confirm technical veracity."</em></p>
+                <div class="mb-2">
+                    <label class="form-label small">Confirm Password for <strong>{{ request.user.username }}</strong>:</label>
+                    <input type="password" name="esign_password" class="form-control form-control-sm" required>
+                </div>
+            </div>
+
+            <div class="d-flex justify-content-between">
+                <a href="{% url 'sample_module' %}" class="btn btn-secondary">Cancel</a>
+                <button type="submit" name="action" value="APPROVE_TO_QA" class="btn btn-primary">Sign & Submit to QA Release</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

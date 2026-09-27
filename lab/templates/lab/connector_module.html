@@ -1,0 +1,170 @@
+{% extends "lab/base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h3 class="fw-bold mb-0"><i class="bi bi-router me-2 text-primary"></i>Instrument / Interface Connector Hub</h3>
+        <p class="text-muted small">Manage real-time communication interfaces with HPLC, GC, UPLC, Balances, pH Meters, TOC, TIMO, and ELN systems.</p>
+    </div>
+</div>
+
+<div class="row g-4">
+    <!-- Active Interfaces & Connection Controls -->
+    <div class="col-lg-8">
+        <div class="card shadow-sm border-0 mb-4">
+            <div class="card-header bg-white py-3">
+                <h5 class="fw-bold mb-0 text-dark">Configured Instrument Interfacing Ports</h5>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Device Tag / Name</th>
+                            <th>Instrument Type</th>
+                            <th>Protocol / Port</th>
+                            <th>Status</th>
+                            <th>Connection</th>
+                            <th>Acquire Data</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for conn in connectors %}
+                        <tr>
+                            <td>
+                                <strong>{{ conn.instrument_tag }}</strong>
+                                <br><small class="text-muted">{{ conn.instrument_name }}</small>
+                            </td>
+                            <td>
+                                <span class="badge bg-secondary">{{ conn.instrument_type }}</span>
+                            </td>
+                            <td>
+                                <small class="font-monospace">{{ conn.get_interface_type_display }}</small>
+                                <br><small class="text-muted">{{ conn.ip_or_com_port }}</small>
+                            </td>
+                            <td>
+                                {% if conn.status == 'ONLINE' %}
+                                    <span class="badge bg-success"><i class="bi bi-circle-fill me-1 small"></i>Online</span>
+                                {% elif conn.status == 'STREAMING' %}
+                                    <span class="badge bg-info"><i class="bi bi-arrow-repeat me-1 small"></i>Acquiring</span>
+                                {% else %}
+                                    <span class="badge bg-danger"><i class="bi bi-circle me-1 small"></i>Offline</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <a href="{% url 'toggle_connector_status' conn.id %}" class="btn btn-sm {% if conn.status == 'ONLINE' %}btn-outline-danger{% else %}btn-outline-success{% endif %}">
+                                    {% if conn.status == 'ONLINE' %}Disconnect{% else %}Connect{% endif %}
+                                </a>
+                            </td>
+                            <td>
+                                <form method="POST" action="{% url 'simulate_instrument_read' conn.id %}" class="d-flex align-items-center gap-1">
+                                    {% csrf_token %}
+                                    <select name="sample_id" class="form-select form-select-sm" style="max-width: 130px;">
+                                        <option value="">No Batch</option>
+                                        {% for s in samples %}
+                                            <option value="{{ s.id }}">{{ s.barcode }}</option>
+                                        {% endfor %}
+                                    </select>
+                                    <button type="submit" class="btn btn-sm btn-primary" title="Poll Device">
+                                        <i class="bi bi-box-arrow-in-down"></i> Read
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="6" class="text-center py-4 text-muted">
+                                No instrument interfaces configured yet. Register a device below.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Recent Real-Time Data Ingest Feed -->
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-white py-3">
+                <h6 class="fw-bold mb-0 text-secondary"><i class="bi bi-activity me-2"></i>Live Data Ingestion Stream (Raw Payloads)</h6>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-sm table-striped mb-0 font-monospace" style="font-size: 0.85rem;">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Timestamp</th>
+                            <th>Device</th>
+                            <th>Sample</th>
+                            <th>Parameter</th>
+                            <th>Value</th>
+                            <th>Raw Payload</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for feed in recent_feeds %}
+                        <tr>
+                            <td>{{ feed.received_timestamp|date:"H:i:s" }}</td>
+                            <td><strong>{{ feed.connector.instrument_tag }}</strong></td>
+                            <td>{{ feed.sample.barcode|default:"-" }}</td>
+                            <td>{{ feed.extracted_parameter }}</td>
+                            <td><strong class="text-primary">{{ feed.extracted_value }}</strong></td>
+                            <td><small class="text-muted text-truncate d-inline-block" style="max-width: 250px;">{{ feed.raw_payload }}</small></td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="6" class="text-center py-3 text-muted">Awaiting instrument incoming data streams...</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Configure New Instrument Connection Interface -->
+    <div class="col-lg-4">
+        <div class="card shadow-sm border-0 p-4 border-top border-4 border-primary">
+            <h5 class="fw-bold mb-3">+ Register Interface Port</h5>
+            <form method="POST">
+                {% csrf_token %}
+                <div class="mb-3">
+                    <label class="form-label small fw-bold">Instrument Identification Tag</label>
+                    <input type="text" name="instrument_tag" class="form-control" placeholder="e.g. HPLC-WATERS-01, BAL-METTLER-02" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small fw-bold">Equipment Description / Model</label>
+                    <input type="text" name="instrument_name" class="form-control" placeholder="e.g. Waters ACQUITY UPLC / Mettler XPE" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small fw-bold">Instrument Type</label>
+                    <select name="instrument_type" class="form-select" required>
+                        <option value="HPLC">HPLC (Chromatography Data System)</option>
+                        <option value="UPLC">UPLC (Waters / Agilent)</option>
+                        <option value="GC">Gas Chromatography (GC)</option>
+                        <option value="BALANCE">Analytical Balance (RS-232)</option>
+                        <option value="PH_METER">Digital pH Meter</option>
+                        <option value="TOC">Total Organic Carbon (TOC)</option>
+                        <option value="TIMO">Automated Titrator (TIMO)</option>
+                        <option value="ELN">Electronic Lab Notebook (ELN REST API)</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small fw-bold">Communication Protocol</label>
+                    <select name="interface_type" class="form-select" required>
+                        <option value="TCPIP">Direct TCP/IP Ethernet (Socket)</option>
+                        <option value="RS232">RS-232 Serial COM Port</option>
+                        <option value="REST_API">RESTful API / Webhook (Empower/ELN)</option>
+                        <option value="FILE_WATCH">Watch Folder / Auto File-Drop</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small fw-bold">Endpoint Address / COM Port</label>
+                    <input type="text" name="ip_or_com_port" class="form-control font-monospace" placeholder="192.168.1.50:8000 or COM3" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small fw-bold">Baud Rate (RS-232 Only)</label>
+                    <input type="number" name="baud_rate" class="form-control font-monospace" value="9600">
+                </div>
+                <button type="submit" class="btn btn-primary w-100">Establish Interface Configuration</button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

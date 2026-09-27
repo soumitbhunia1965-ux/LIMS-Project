@@ -4,12 +4,12 @@
 <div class="d-flex justify-content-between align-items-center mb-3">
     <div>
         <h3 class="fw-bold mb-0">Sample Management Module</h3>
-        <p class="text-muted small">Worklist, sample registration, testing execution, and CoA releases.</p>
+        <p class="text-muted small">Sample registration, analytical execution, technical review, and QA release.</p>
     </div>
     <a href="{% url 'sample_entry' %}" class="btn btn-primary"><i class="bi bi-plus-lg me-1"></i>Log New Sample</a>
 </div>
 
-<!-- Filter & Search Bar -->
+<!-- Filter Bar -->
 <div class="card p-3 shadow-sm mb-4 border-0">
     <form method="GET" class="row g-2 align-items-center">
         <div class="col-md-4">
@@ -20,7 +20,10 @@
                 <option value="">All Statuses</option>
                 <option value="LOGGED" {% if status_filter == 'LOGGED' %}selected{% endif %}>Logged</option>
                 <option value="IN_PROGRESS" {% if status_filter == 'IN_PROGRESS' %}selected{% endif %}>In Progress</option>
-                <option value="COMPLETED" {% if status_filter == 'COMPLETED' %}selected{% endif %}>Completed</option>
+                <option value="UNDER_REVIEW" {% if status_filter == 'UNDER_REVIEW' %}selected{% endif %}>Under Review</option>
+                <option value="OOS_INVESTIGATION" {% if status_filter == 'OOS_INVESTIGATION' %}selected{% endif %}>OOS Investigation</option>
+                <option value="RELEASED" {% if status_filter == 'RELEASED' %}selected{% endif %}>Released</option>
+                <option value="REJECTED" {% if status_filter == 'REJECTED' %}selected{% endif %}>Rejected</option>
             </select>
         </div>
         <div class="col-md-2">
@@ -36,11 +39,10 @@
                 <th>Barcode</th>
                 <th>Type</th>
                 <th>Batch #</th>
-                <th>Received At</th>
-                <th>Status</th>
-                <th>Label</th>
+                <th>Life Cycle Status</th>
+                <th>Barcode</th>
                 <th>CoA</th>
-                <th>Actions</th>
+                <th>Compliance Actions</th>
             </tr>
         </thead>
         <tbody>
@@ -49,36 +51,38 @@
                 <td><strong>{{ sample.barcode }}</strong></td>
                 <td>{{ sample.sample_type }}</td>
                 <td>{{ sample.batch_number }}</td>
-                <td><small>{{ sample.received_at|date:"Y-m-d H:i" }}</small></td>
                 <td>
-                    {% if sample.overall_status == 'PASSED' %}
-                        <span class="badge bg-success">PASSED</span>
-                    {% elif sample.overall_status == 'OOS' %}
-                        <span class="badge bg-danger">OOS</span>
-                    {% else %}
-                        <span class="badge bg-secondary">{{ sample.status }}</span>
-                    {% endif %}
+                    {% if sample.status == 'RELEASED' %}<span class="badge bg-success">RELEASED</span>
+                    {% elif sample.status == 'REJECTED' %}<span class="badge bg-danger">REJECTED</span>
+                    {% elif sample.status == 'OOS_INVESTIGATION' %}<span class="badge bg-danger">OOS INVESTIGATION</span>
+                    {% elif sample.status == 'UNDER_REVIEW' %}<span class="badge bg-info text-dark">UNDER REVIEW</span>
+                    {% else %}<span class="badge bg-secondary">{{ sample.status }}</span>{% endif %}
                 </td>
                 <td>
                     <a href="{% url 'barcode_image' sample.barcode %}" target="_blank" class="btn btn-sm btn-outline-dark">
-                        <i class="bi bi-upc-scan me-1"></i>Barcode
+                        <i class="bi bi-upc-scan"></i>
                     </a>
                 </td>
                 <td>
                     <a href="{% url 'generate_coa' sample.id %}" target="_blank" class="btn btn-sm btn-outline-danger">
-                        <i class="bi bi-file-earmark-pdf me-1"></i>CoA
+                        <i class="bi bi-file-earmark-pdf"></i> CoA
                     </a>
                 </td>
                 <td>
-                    <a href="{% url 'enter_results' sample.id %}" class="btn btn-sm btn-success">
-                        Enter / Review
-                    </a>
+                    {% if sample.status == 'LOGGED' or sample.status == 'IN_PROGRESS' %}
+                        <a href="{% url 'enter_results' sample.id %}" class="btn btn-sm btn-success">Enter Results</a>
+                    {% elif sample.status == 'UNDER_REVIEW' %}
+                        <a href="{% url 'technical_review' sample.id %}" class="btn btn-sm btn-primary">Technical Review</a>
+                        <a href="{% url 'qa_release' sample.id %}" class="btn btn-sm btn-outline-success">QA Release</a>
+                    {% elif sample.status == 'OOS_INVESTIGATION' %}
+                        <a href="{% url 'oos_investigation' sample.id %}" class="btn btn-sm btn-danger">Phase I Investigation</a>
+                    {% else %}
+                        <span class="text-muted small">Disposition Complete</span>
+                    {% endif %}
                 </td>
             </tr>
             {% empty %}
-            <tr>
-                <td colspan="8" class="text-center py-4 text-muted">No samples matched your search.</td>
-            </tr>
+            <tr><td colspan="7" class="text-center py-4 text-muted">No samples found.</td></tr>
             {% endfor %}
         </tbody>
     </table>

@@ -1,0 +1,60 @@
+{% extends "lab/base.html" %}
+
+{% block content %}
+<div class="container" style="max-width: 800px;">
+    <div class="card shadow-sm p-4 border-0 border-top border-4 border-danger">
+        <h4 class="fw-bold text-danger mb-2"><i class="bi bi-exclamation-triangle-fill me-2"></i>Phase I Laboratory OOS Investigation</h4>
+        <p class="text-muted">Sample Barcode: <strong>{{ sample.barcode }}</strong> | Batch: <strong>{{ sample.batch_number }}</strong></p>
+        <hr>
+
+        <form method="POST">
+            {% csrf_token %}
+            <h6 class="fw-bold">Phase I Laboratory Checklist:</h6>
+            <div class="form-check mb-2">
+                <input class="form-check-input" type="checkbox" name="chk_std" id="chk_std" {% if investigation.checklist_standard_prep %}checked{% endif %}>
+                <label class="form-check-label" for="chk_std">Reference standards & volumetric reagents within expiry and properly stored</label>
+            </div>
+            <div class="form-check mb-2">
+                <input class="form-check-input" type="checkbox" name="chk_inst" id="chk_inst" {% if investigation.checklist_instrument_param %}checked{% endif %}>
+                <label class="form-check-label" for="chk_inst">Analytical instrument calibration verified and chromatographic column qualified</label>
+            </div>
+            <div class="form-check mb-2">
+                <input class="form-check-input" type="checkbox" name="chk_sys" id="chk_sys" {% if investigation.checklist_system_suitability %}checked{% endif %}>
+                <label class="form-check-label" for="chk_sys">System suitability criteria (%RSD, tailing factor, resolution) compliant</label>
+            </div>
+            <div class="form-check mb-3">
+                <input class="form-check-input" type="checkbox" name="chk_dil" id="chk_dil" {% if investigation.checklist_sample_dilution %}checked{% endif %}>
+                <label class="form-check-label" for="chk_dil">Sample weighing records and dilution calculations independently verified</label>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label fw-bold">Root Cause Analysis / Summary:</label>
+                <textarea name="root_cause" class="form-control" rows="2" placeholder="e.g. Air bubble trapped in flow cell caused anomalous absorbance peak." required>{{ investigation.root_cause_analysis|default:"" }}</textarea>
+            </div>
+            <div class="mb-3">
+                <label class="form-label fw-bold">CAPA / Corrective Actions:</label>
+                <textarea name="capa" class="form-control" rows="2" placeholder="e.g. Degassed mobile phase; purged flow lines." required>{{ investigation.capa_action|default:"" }}</textarea>
+            </div>
+            <div class="mb-3">
+                <label class="form-label fw-bold">Investigation Conclusion:</label>
+                <select name="oos_decision" class="form-select" required>
+                    <option value="LAB_ERROR_CONFIRMED">Assignable Cause: Confirmed Laboratory Error (Invalidate Test & Re-test)</option>
+                    <option value="MANUFACTURING_CONFIRMED">True OOS: No Lab Error (Batch Non-Conformance Confirmed)</option>
+                </select>
+            </div>
+
+            <!-- Electronic Signature -->
+            <div class="p-3 bg-light border rounded mb-3">
+                <h6 class="fw-bold"><i class="bi bi-key-fill text-warning me-1"></i>21 CFR Part 11 Electronic Signature</h6>
+                <label class="form-label small">Password for <strong>{{ request.user.username }}</strong>:</label>
+                <input type="password" name="esign_password" class="form-control form-control-sm" required>
+            </div>
+
+            <div class="d-flex justify-content-between">
+                <a href="{% url 'sample_module' %}" class="btn btn-secondary">Back</a>
+                <button type="submit" class="btn btn-danger">Sign & Conclude Phase I Investigation</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
