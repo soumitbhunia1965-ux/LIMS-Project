@@ -127,4 +127,14 @@ MAILERS = {
         'BACKEND': 'django.core.mail.backends.console.EmailBackend',
     },
 }
-LOGIN_URL = '/admin/login/'
+LOGIN_URL = '/accounts/login/'
+LOGIN_REDIRECT_URL = '/'
+LOGOUT_REDIRECT_URL = '/accounts/login/'
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
+from django.conf import settings
+from django.conf.urls.static import static
+
+urlpatterns = [
+    # existing paths...
+] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

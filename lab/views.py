@@ -1,5 +1,6 @@
 import io
 import csv
+import random
 from datetime import datetime, timedelta
 import barcode
 from barcode.writer import ImageWriter
@@ -9,21 +10,140 @@ from reportlab.lib import colors
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 
+from django import forms
 from django.http import HttpResponse
 from django.shortcuts import render, redirect, get_object_or_404
+from django.contrib.auth import authenticate, login, logout, update_session_auth_hash
+from django.contrib.auth.models import User
+from django.contrib.auth.forms import PasswordChangeForm
 from django.contrib.auth.decorators import login_required
-from django.contrib.auth import authenticate
 from django.contrib import messages
 from django.utils import timezone
 
 from .models import (
     Sample, TestDefinition, TestResult, UniversalAuditTrail,
     ElectronicSignature, Instrument, StabilityStudy, StabilityTimepoint,
-    OOSInvestigation
+    OOSInvestigation, InstrumentConnector, InstrumentDataFeed,
+    Department, JobType, UserProfile
 )
 
 
-# Helper: Electronic Signature & Re-Authentication Verification
+# ==========================================================
+# 0. AUTHENTICATION, PROFILE & SECURITY CONFIGURATION
+# ==========================================================
+def custom_login_view(request):
+    if request.user.is_authenticated:
+        return redirect('main_hub')
+
+    if request.method == 'POST':
+        username = request.POST.get('username', '').strip()
+        password = request.POST.get('password', '').strip()
+        selected_db = request.POST.get('database_instance', 'QC_PROD')
+
+        user = authenticate(request, username=username, password=password)
+        if user is not None:
+            login(request, user)
+            request.session['active_database'] = selected_db
+
+            UniversalAuditTrail.objects.create(
+                module_name="Authentication",
+                entity_name=user.username,
+                record_id=str(user.id),
+                action='CREATE',
+                field_name="Logon",
+                new_value=f"User session started in instance: {selected_db}",
+                reason="Interactive logon verification",
+                performed_by=user
+            )
+            return redirect('main_hub')
+        else:
+            messages.error(request, "Invalid username or password. Please verify credentials.")
+
+    return render(request, 'lab/login.html')
+
+
+def custom_logout_view(request):
+    if request.user.is_authenticated:
+        UniversalAuditTrail.objects.create(
+            module_name="Authentication",
+            entity_name=request.user.username,
+            record_id=str(request.user.id),
+            action='UPDATE',
+            field_name="Logging Off",
+            new_value="User session terminated",
+            reason="User initiated logout",
+            performed_by=request.user
+        )
+        logout(request)
+    return redirect('custom_login')
+
+
+@login_required
+def change_password_view(request):
+    if request.method == 'POST':
+        form = PasswordChangeForm(request.user, request.POST)
+        if form.is_valid():
+            user = form.save()
+            update_session_auth_hash(request, user)
+
+            profile, _ = UserProfile.objects.get_or_create(user=user)
+            profile.password_last_changed = timezone.now()
+            profile.force_password_change = False
+            profile.save()
+
+            UniversalAuditTrail.objects.create(
+                module_name="Security Administration",
+                entity_name=user.username,
+                record_id=str(user.id),
+                action='UPDATE',
+                field_name="Password",
+                new_value="Password changed per 21 CFR Part 11 policy",
+                reason="User self-service password update",
+                performed_by=user
+            )
+            messages.success(request, "Your password was successfully updated!")
+            return redirect('main_hub')
+        else:
+            messages.error(request, "Please correct the error below.")
+    else:
+        form = PasswordChangeForm(request.user)
+
+    return render(request, 'lab/change_password.html', {'form': form})
+
+
+class ProfilePictureForm(forms.ModelForm):
+    class Meta:
+        model = UserProfile
+        fields = ['avatar']
+
+
+@login_required
+def change_profile_picture_view(request):
+    profile, _ = UserProfile.objects.get_or_create(user=request.user)
+    if request.method == 'POST':
+        form = ProfilePictureForm(request.POST, request.FILES, instance=profile)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Profile picture updated successfully!")
+            return redirect('main_hub')
+    else:
+        form = ProfilePictureForm(instance=profile)
+    return render(request, 'lab/change_profile_picture.html', {'form': form, 'profile': profile})
+
+
+@login_required
+def security_config_view(request):
+    departments = Department.objects.all()
+    job_types = JobType.objects.all()
+    users = User.objects.all()
+    return render(request, 'lab/security_config.html', {
+        'departments': departments,
+        'job_types': job_types,
+        'users': users
+    })
+
+
+# Electronic Signature Verification Helper
 def verify_electronic_signature(request, record_reference, module_name, meaning, reason):
     password = request.POST.get('esign_password', '').strip()
     user = authenticate(username=request.user.username, password=password)
@@ -35,7 +155,7 @@ def verify_electronic_signature(request, record_reference, module_name, meaning,
         record_reference=record_reference,
         meaning=meaning,
         signer=request.user,
-        signer_full_name=f"{request.user.first_name} {request.user.last_name}" if request.user.first_name else request.user.username,
+        signer_full_name=f"{request.user.first_name} {request.user.last_name}".strip() or request.user.username,
         reason=reason
     )
     UniversalAuditTrail.objects.create(
@@ -51,32 +171,32 @@ def verify_electronic_signature(request, record_reference, module_name, meaning,
     return True, "Signature captured successfully."
 
 
-# ==========================================
-# MAIN PORTAL DASHBOARD
-# ==========================================
+# ==========================================================
+# MAIN HUB DASHBOARD
+# ==========================================================
 @login_required
 def main_hub_view(request):
     total_samples = Sample.objects.count()
     under_review_count = Sample.objects.filter(status='UNDER_REVIEW').count()
     oos_investigations = OOSInvestigation.objects.filter(status='OPEN').count()
-    expired_instruments = Instrument.objects.filter(status='EXPIRED').count()
     instruments_total = Instrument.objects.count()
+    expired_instruments = Instrument.objects.filter(status='EXPIRED').count()
     pending_pulls = StabilityTimepoint.objects.filter(status='SCHEDULED').count()
 
     context = {
         'total_samples': total_samples,
         'under_review_count': under_review_count,
         'oos_investigations': oos_investigations,
-        'expired_instruments': expired_instruments,
         'instruments_total': instruments_total,
+        'expired_instruments': expired_instruments,
         'pending_pulls': pending_pulls,
     }
     return render(request, 'lab/main_hub.html', context)
 
 
-# ==========================================
-# MODULE 1: SAMPLE MANAGEMENT & LIFE CYCLE
-# ==========================================
+# ==========================================================
+# MODULE 1: SAMPLE MANAGEMENT & RESULTS
+# ==========================================================
 @login_required
 def sample_module_view(request):
     query = request.GET.get('q', '').strip()
@@ -103,7 +223,7 @@ def sample_entry_view(request):
         batch_number = request.POST.get('batch_number', '').strip()
 
         if Sample.objects.filter(barcode=barcode_val).exists():
-            messages.error(request, f"Sample '{barcode_val}' already exists.")
+            messages.error(request, f"Sample with barcode '{barcode_val}' already exists.")
             return render(request, 'lab/sample_entry.html')
 
         s = Sample.objects.create(
@@ -119,10 +239,10 @@ def sample_entry_view(request):
             action='CREATE',
             field_name="Sample Registration",
             new_value=f"Type: {sample_type}, Batch: {batch_number}",
-            reason="Sample login and receipt verification",
+            reason="Sample registration and accessioning",
             performed_by=request.user
         )
-        messages.success(request, f"Sample '{barcode_val}' logged.")
+        messages.success(request, f"Sample '{barcode_val}' logged successfully.")
         return redirect('sample_module')
 
     return render(request, 'lab/sample_entry.html')
@@ -196,17 +316,13 @@ def enter_results_view(request, sample_id):
                     if tr.status == 'OOS':
                         has_oos = True
 
-        # Transition Life Cycle Status
         if has_oos or sample.overall_result_flag() == 'OOS':
             sample.status = 'OOS_INVESTIGATION'
-            OOSInvestigation.objects.get_or_create(
-                sample=sample,
-                defaults={'initiated_by': request.user}
-            )
-            messages.warning(request, f"Out-of-Specification detected! Sample moved to OOS Phase I Investigation.")
+            OOSInvestigation.objects.get_or_create(sample=sample, defaults={'initiated_by': request.user})
+            messages.warning(request, "Out-of-Specification detected! Sample transitioned to OOS Phase I Investigation.")
         else:
             sample.status = 'UNDER_REVIEW'
-            messages.success(request, f"Testing complete. Sample submitted to Technical Review.")
+            messages.success(request, "Testing completed. Sample submitted for Technical Peer Review.")
 
         sample.save()
         return redirect('sample_module')
@@ -223,20 +339,16 @@ def enter_results_view(request, sample_id):
     })
 
 
-# --- SEPARATION OF DUTIES: TECHNICAL PEER REVIEW ---
 @login_required
 def technical_review_view(request, sample_id):
     sample = get_object_or_404(Sample, id=sample_id)
 
-    # SoD Check: Analyst cannot review their own logged/tested sample
     if sample.logged_by == request.user:
-        messages.error(request, "Segregation of Duties Violation: You cannot review a sample you registered.")
+        messages.error(request, "Segregation of Duties Violation: You cannot review a sample you logged/tested.")
         return redirect('sample_module')
 
     if request.method == 'POST':
-        action_type = request.POST.get('action') # 'APPROVE_TO_QA' or 'REJECT_TO_ANALYST'
         notes = request.POST.get('review_notes', '')
-
         valid, msg = verify_electronic_signature(
             request,
             record_reference=sample.barcode,
@@ -252,24 +364,22 @@ def technical_review_view(request, sample_id):
         sample.reviewed_at = timezone.now()
         sample.status = 'UNDER_REVIEW'
         sample.save()
-        messages.success(request, f"Sample {sample.barcode} technically reviewed and signed.")
+        messages.success(request, f"Sample {sample.barcode} peer-reviewed and signed.")
         return redirect('sample_module')
 
     return render(request, 'lab/technical_review.html', {'sample': sample})
 
 
-# --- SEPARATION OF DUTIES: QA FINAL RELEASE / DISPOSITION ---
 @login_required
 def qa_release_view(request, sample_id):
     sample = get_object_or_404(Sample, id=sample_id)
 
-    # SoD Check: Analyst or Peer Reviewer cannot act as QA Release Authority
     if request.user in [sample.logged_by, sample.reviewed_by]:
         messages.error(request, "Segregation of Duties Violation: QA Release must be performed by an independent QA authority.")
         return redirect('sample_module')
 
     if request.method == 'POST':
-        decision = request.POST.get('decision') # 'RELEASED' or 'REJECTED'
+        decision = request.POST.get('decision')
         notes = request.POST.get('qa_notes', '')
 
         valid, msg = verify_electronic_signature(
@@ -289,13 +399,12 @@ def qa_release_view(request, sample_id):
         sample.qa_disposition_notes = notes
         sample.save()
 
-        messages.success(request, f"Sample {sample.barcode} finalized as {decision}.")
+        messages.success(request, f"Sample {sample.barcode} disposition finalized as {decision}.")
         return redirect('sample_module')
 
     return render(request, 'lab/qa_release.html', {'sample': sample})
 
 
-# --- OOS PHASE I INVESTIGATION VIEW ---
 @login_required
 def oos_investigation_view(request, sample_id):
     sample = get_object_or_404(Sample, id=sample_id)
@@ -327,7 +436,7 @@ def oos_investigation_view(request, sample_id):
 
         if investigation.status == 'LAB_ERROR_CONFIRMED':
             sample.status = 'IN_PROGRESS'
-            messages.info(request, "Lab Error identified. Sample returned to analyst for re-testing under protocol.")
+            messages.info(request, "Lab Error identified. Sample returned for re-testing under protocol.")
         else:
             sample.status = 'REJECTED'
             messages.error(request, "True Out of Specification confirmed. Batch marked as REJECTED.")
@@ -338,187 +447,6 @@ def oos_investigation_view(request, sample_id):
     return render(request, 'lab/oos_investigation.html', {'sample': sample, 'investigation': investigation})
 
 
-# ==========================================
-# MODULE 2: MASTER DATA MANAGEMENT (MDM)
-# ==========================================
-@login_required
-def mdm_module_view(request):
-    tests = TestDefinition.objects.all().order_by('name')
-    if request.method == 'POST':
-        name = request.POST.get('name', '').strip()
-        unit = request.POST.get('unit', '').strip()
-        min_lim = request.POST.get('min_limit') or None
-        max_lim = request.POST.get('max_limit') or None
-        change_reason = request.POST.get('reason', 'Master Data Specification addition')
-
-        if TestDefinition.objects.filter(name__iexact=name).exists():
-            messages.error(request, f"Specification '{name}' already exists.")
-            return redirect('mdm_module')
-
-        t = TestDefinition.objects.create(
-            name=name,
-            unit=unit,
-            min_limit=float(min_lim) if min_lim else None,
-            max_limit=float(max_lim) if max_lim else None,
-        )
-        UniversalAuditTrail.objects.create(
-            module_name="MDM Specifications",
-            entity_name=t.name,
-            record_id=str(t.id),
-            action='CREATE',
-            field_name="Specification Range",
-            new_value=f"Min: {min_lim}, Max: {max_lim} {unit}",
-            reason=change_reason,
-            performed_by=request.user
-        )
-        messages.success(request, f"Test definition '{name}' added with audit trail.")
-        return redirect('mdm_module')
-
-    return render(request, 'lab/mdm_module.html', {'tests': tests})
-
-
-# ==========================================
-# MODULE 3: INSTRUMENT CALIBRATION MODULE
-# ==========================================
-@login_required
-def instrument_module_view(request):
-    instruments = Instrument.objects.all().order_by('calibration_due')
-    today = timezone.now().date()
-
-    for inst in instruments:
-        if inst.get_due_date() and today > inst.get_due_date():
-            if inst.status != 'EXPIRED':
-                inst.status = 'EXPIRED'
-                inst.save()
-
-    if request.method == 'POST':
-        inst_id = request.POST.get('instrument_id', '').strip()
-        name = request.POST.get('name', '').strip()
-        model = request.POST.get('model_number', '').strip()
-        last_cal_str = request.POST.get('last_calibrated')
-        cal_due_str = request.POST.get('calibration_due')
-        reason = request.POST.get('reason', 'Instrument Registration')
-
-        if Instrument.objects.filter(instrument_id=inst_id).exists():
-            messages.error(request, f"Instrument '{inst_id}' already registered.")
-            return redirect('instrument_module')
-
-        last_cal = datetime.strptime(last_cal_str, '%Y-%m-%d').date() if last_cal_str else None
-        cal_due = datetime.strptime(cal_due_str, '%Y-%m-%d').date() if cal_due_str else None
-
-        inst = Instrument.objects.create(
-            instrument_id=inst_id,
-            name=name,
-            model_number=model,
-            last_calibrated=last_cal,
-            calibration_due=cal_due,
-        )
-        UniversalAuditTrail.objects.create(
-            module_name="Instrument Inventory",
-            entity_name=inst.instrument_id,
-            record_id=str(inst.id),
-            action='CREATE',
-            field_name="Calibration Dates",
-            new_value=f"Calibrated: {last_cal} | Due: {cal_due}",
-            reason=reason,
-            performed_by=request.user
-        )
-        messages.success(request, f"Instrument '{inst_id}' registered with audit trail.")
-        return redirect('instrument_module')
-
-    return render(request, 'lab/instrument_module.html', {'instruments': instruments, 'today': today})
-
-
-# ==========================================
-# MODULE 4: STABILITY MANAGEMENT MODULE
-# ==========================================
-@login_required
-def stability_module_view(request):
-    studies = StabilityStudy.objects.all().order_by('-start_date')
-    samples = Sample.objects.all()
-
-    if request.method == 'POST':
-        code = request.POST.get('study_code', '').strip()
-        sample_id = request.POST.get('sample_id')
-        condition = request.POST.get('storage_condition')
-        proto = request.POST.get('protocol_reference')
-        start_date_str = request.POST.get('start_date')
-        reason = request.POST.get('reason', 'Stability protocol initialization')
-
-        start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date() if start_date_str else timezone.now().date()
-
-        if StabilityStudy.objects.filter(study_code=code).exists():
-            messages.error(request, f"Study '{code}' already exists.")
-            return redirect('stability_module')
-
-        sample = get_object_or_404(Sample, id=sample_id)
-        study = StabilityStudy.objects.create(
-            study_code=code,
-            sample=sample,
-            storage_condition=condition,
-            protocol_reference=proto,
-            start_date=start_date
-        )
-
-        intervals = [('1 Month', 30), ('3 Months', 90), ('6 Months', 180), ('12 Months', 365)]
-        for label, days in intervals:
-            StabilityTimepoint.objects.create(
-                study=study,
-                interval_name=label,
-                scheduled_date=start_date + timedelta(days=days),
-                status='SCHEDULED'
-            )
-
-        UniversalAuditTrail.objects.create(
-            module_name="Stability Management",
-            entity_name=study.study_code,
-            record_id=str(study.id),
-            action='CREATE',
-            field_name="Study Protocol",
-            new_value=f"Batch: {sample.batch_number}, Condition: {condition}",
-            reason=reason,
-            performed_by=request.user
-        )
-        messages.success(request, f"Stability study '{code}' registered.")
-        return redirect('stability_module')
-
-    return render(request, 'lab/stability_module.html', {'studies': studies, 'samples': samples})
-
-
-@login_required
-def pull_timepoint_view(request, timepoint_id):
-    tp = get_object_or_404(StabilityTimepoint, id=timepoint_id)
-    tp.status = 'PULLED'
-    tp.actual_pull_date = timezone.now().date()
-    tp.save()
-
-    UniversalAuditTrail.objects.create(
-        module_name="Stability Management",
-        entity_name=f"{tp.study.study_code} - {tp.interval_name}",
-        record_id=str(tp.id),
-        action='UPDATE',
-        field_name="Chamber Pull Status",
-        old_value="SCHEDULED",
-        new_value=f"PULLED on {tp.actual_pull_date}",
-        reason="Scheduled pull execution from chamber",
-        performed_by=request.user
-    )
-    messages.success(request, f"Pulled {tp.interval_name} sample for study {tp.study.study_code}.")
-    return redirect('stability_module')
-
-
-# ==========================================
-# MODULE 5: AUDIT TRAIL LOG EXPLORER
-# ==========================================
-@login_required
-def audit_explorer_view(request):
-    logs = UniversalAuditTrail.objects.all().order_by('-timestamp')[:200]
-    return render(request, 'lab/audit_explorer.html', {'logs': logs})
-
-
-# ==========================================
-# CERTIFICATE OF ANALYSIS (CoA) GENERATOR
-# ==========================================
 @login_required
 def generate_coa_pdf(request, sample_id):
     sample = get_object_or_404(Sample, id=sample_id)
@@ -553,9 +481,7 @@ def generate_coa_pdf(request, sample_id):
     elements.append(t_meta)
     elements.append(Spacer(1, 15))
 
-    result_table_data = [
-        ["Test Parameter", "Specification Range", "Instrument", "Observed", "Status", "Analyst"]
-    ]
+    result_table_data = [["Test Parameter", "Specification Range", "Instrument", "Observed", "Status", "Analyst"]]
     for r in results:
         min_lim = r.test.min_limit if r.test.min_limit is not None else "-Inf"
         max_lim = r.test.max_limit if r.test.max_limit is not None else "+Inf"
@@ -583,10 +509,7 @@ def generate_coa_pdf(request, sample_id):
         elements.append(Paragraph(f"<i>QA Comments: {sample.qa_disposition_notes}</i>", styles['Normal']))
     elements.append(Spacer(1, 20))
 
-    # Electronic Manifestation Block
-    sig_data = [
-        [f"Technical Review e-Signature:\n{reviewer_str}", f"QA Release e-Signature:\n{qa_str}"]
-    ]
+    sig_data = [[f"Technical Review e-Signature:\n{reviewer_str}", f"QA Release e-Signature:\n{qa_str}"]]
     t_sig = Table(sig_data, colWidths=[270, 270])
     t_sig.setStyle(TableStyle([('BOX', (0,0), (-1,-1), 1, colors.HexColor('#999999')), ('PADDING', (0,0), (-1,-1), 8)]))
     elements.append(t_sig)
@@ -594,11 +517,179 @@ def generate_coa_pdf(request, sample_id):
     doc.build(elements)
     buffer.seek(0)
     return HttpResponse(buffer, content_type='application/pdf')
-import random
-from .models import InstrumentConnector, InstrumentDataFeed
+
 
 # ==========================================================
-# MODULE: INSTRUMENT / INTERFACE CONNECTOR MODULE
+# MODULE 2: MASTER DATA MANAGEMENT (MDM)
+# ==========================================================
+@login_required
+def mdm_module_view(request):
+    tests = TestDefinition.objects.all().order_by('name')
+    if request.method == 'POST':
+        name = request.POST.get('name', '').strip()
+        unit = request.POST.get('unit', '').strip()
+        min_lim = request.POST.get('min_limit') or None
+        max_lim = request.POST.get('max_limit') or None
+        change_reason = request.POST.get('reason', 'Master Data Specification addition')
+
+        if TestDefinition.objects.filter(name__iexact=name).exists():
+            messages.error(request, f"Specification '{name}' already exists.")
+            return redirect('mdm_module')
+
+        t = TestDefinition.objects.create(
+            name=name,
+            unit=unit,
+            min_limit=float(min_lim) if min_lim else None,
+            max_limit=float(max_lim) if max_lim else None,
+        )
+        UniversalAuditTrail.objects.create(
+            module_name="MDM Specifications",
+            entity_name=t.name,
+            record_id=str(t.id),
+            action='CREATE',
+            field_name="Specification Limits",
+            new_value=f"Min: {min_lim}, Max: {max_lim} {unit}",
+            reason=change_reason,
+            performed_by=request.user
+        )
+        messages.success(request, f"Test definition '{name}' added successfully.")
+        return redirect('mdm_module')
+
+    return render(request, 'lab/mdm_module.html', {'tests': tests})
+
+
+# ==========================================================
+# MODULE 3: INSTRUMENTS & CALIBRATION
+# ==========================================================
+@login_required
+def instrument_module_view(request):
+    instruments = Instrument.objects.all().order_by('calibration_due')
+    today = timezone.now().date()
+
+    for inst in instruments:
+        if inst.get_due_date() and today > inst.get_due_date():
+            if inst.status != 'EXPIRED':
+                inst.status = 'EXPIRED'
+                inst.save()
+
+    if request.method == 'POST':
+        inst_id = request.POST.get('instrument_id', '').strip()
+        name = request.POST.get('name', '').strip()
+        model = request.POST.get('model_number', '').strip()
+        last_cal_str = request.POST.get('last_calibrated')
+        cal_due_str = request.POST.get('calibration_due')
+        reason = request.POST.get('reason', 'Instrument Registration')
+
+        if Instrument.objects.filter(instrument_id=inst_id).exists():
+            messages.error(request, f"Instrument '{inst_id}' is already registered.")
+            return redirect('instrument_module')
+
+        last_cal = datetime.strptime(last_cal_str, '%Y-%m-%d').date() if last_cal_str else None
+        cal_due = datetime.strptime(cal_due_str, '%Y-%m-%d').date() if cal_due_str else None
+
+        inst = Instrument.objects.create(
+            instrument_id=inst_id,
+            name=name,
+            model_number=model,
+            last_calibrated=last_cal,
+            calibration_due=cal_due,
+        )
+        UniversalAuditTrail.objects.create(
+            module_name="Instrument Inventory",
+            entity_name=inst.instrument_id,
+            record_id=str(inst.id),
+            action='CREATE',
+            field_name="Calibration Dates",
+            new_value=f"Calibrated: {last_cal} | Due: {cal_due}",
+            reason=reason,
+            performed_by=request.user
+        )
+        messages.success(request, f"Instrument '{inst_id}' registered successfully.")
+        return redirect('instrument_module')
+
+    return render(request, 'lab/instrument_module.html', {'instruments': instruments, 'today': today})
+
+
+# ==========================================================
+# MODULE 4: STABILITY MANAGEMENT
+# ==========================================================
+@login_required
+def stability_module_view(request):
+    studies = StabilityStudy.objects.all().order_by('-start_date')
+    samples = Sample.objects.all()
+
+    if request.method == 'POST':
+        code = request.POST.get('study_code', '').strip()
+        sample_id = request.POST.get('sample_id')
+        condition = request.POST.get('storage_condition')
+        proto = request.POST.get('protocol_reference')
+        start_date_str = request.POST.get('start_date')
+        reason = request.POST.get('reason', 'Stability protocol initialization')
+
+        start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date() if start_date_str else timezone.now().date()
+
+        if StabilityStudy.objects.filter(study_code=code).exists():
+            messages.error(request, f"Study code '{code}' already exists.")
+            return redirect('stability_module')
+
+        sample = get_object_or_404(Sample, id=sample_id)
+        study = StabilityStudy.objects.create(
+            study_code=code,
+            sample=sample,
+            storage_condition=condition,
+            protocol_reference=proto,
+            start_date=start_date
+        )
+
+        intervals = [('1 Month', 30), ('3 Months', 90), ('6 Months', 180), ('12 Months', 365)]
+        for label, days in intervals:
+            StabilityTimepoint.objects.create(
+                study=study,
+                interval_name=label,
+                scheduled_date=start_date + timedelta(days=days),
+                status='SCHEDULED'
+            )
+
+        UniversalAuditTrail.objects.create(
+            module_name="Stability Management",
+            entity_name=study.study_code,
+            record_id=str(study.id),
+            action='CREATE',
+            field_name="Study Protocol",
+            new_value=f"Batch: {sample.batch_number}, Condition: {condition}",
+            reason=reason,
+            performed_by=request.user
+        )
+        messages.success(request, f"Stability study '{code}' registered successfully.")
+        return redirect('stability_module')
+
+    return render(request, 'lab/stability_module.html', {'studies': studies, 'samples': samples})
+
+
+@login_required
+def pull_timepoint_view(request, timepoint_id):
+    tp = get_object_or_404(StabilityTimepoint, id=timepoint_id)
+    tp.status = 'PULLED'
+    tp.actual_pull_date = timezone.now().date()
+    tp.save()
+
+    UniversalAuditTrail.objects.create(
+        module_name="Stability Management",
+        entity_name=f"{tp.study.study_code} - {tp.interval_name}",
+        record_id=str(tp.id),
+        action='UPDATE',
+        field_name="Chamber Pull Status",
+        old_value="SCHEDULED",
+        new_value=f"PULLED on {tp.actual_pull_date}",
+        reason="Scheduled pull executed from chamber",
+        performed_by=request.user
+    )
+    messages.success(request, f"Marked {tp.interval_name} timepoint as Pulled for study {tp.study.study_code}.")
+    return redirect('stability_module')
+
+
+# ==========================================================
+# MODULE 5: INSTRUMENT / INTERFACE CONNECTOR
 # ==========================================================
 @login_required
 def connector_module_view(request):
@@ -615,7 +706,7 @@ def connector_module_view(request):
         baud = request.POST.get('baud_rate') or 9600
 
         if InstrumentConnector.objects.filter(instrument_tag=tag).exists():
-            messages.error(request, f"Interface connector '{tag}' already exists.")
+            messages.error(request, f"Connector interface '{tag}' already exists.")
             return redirect('connector_module')
 
         inst = InstrumentConnector.objects.create(
@@ -638,7 +729,6 @@ def connector_module_view(request):
             reason="Device interface registration",
             performed_by=request.user
         )
-
         messages.success(request, f"Connector interface for '{tag}' configured.")
         return redirect('connector_module')
 
@@ -651,15 +741,14 @@ def connector_module_view(request):
 
 @login_required
 def toggle_connector_status(request, connector_id):
-    """Pings and toggles the connection between Online / Offline"""
     connector = get_object_or_404(InstrumentConnector, id=connector_id)
     if connector.status in ['OFFLINE', 'ERROR']:
         connector.status = 'ONLINE'
         connector.last_ping = timezone.now()
-        messages.success(request, f"Successfully established live handshake with {connector.instrument_tag} at {connector.ip_or_com_port}.")
+        messages.success(request, f"Handshake established with {connector.instrument_tag} at {connector.ip_or_com_port}.")
     else:
         connector.status = 'OFFLINE'
-        messages.info(request, f"Interface connection to {connector.instrument_tag} closed.")
+        messages.info(request, f"Connection to {connector.instrument_tag} disconnected.")
 
     connector.save()
     return redirect('connector_module')
@@ -667,12 +756,10 @@ def toggle_connector_status(request, connector_id):
 
 @login_required
 def simulate_instrument_read(request, connector_id):
-    """Simulates live data acquisition from balance, pH meter, HPLC, or ELN"""
     connector = get_object_or_404(InstrumentConnector, id=connector_id)
     sample_id = request.POST.get('sample_id')
     sample = Sample.objects.filter(id=sample_id).first() if sample_id else None
 
-    # Simulate typical laboratory instrument measurements
     mock_values = {
         'BALANCE': ('Gross Weight (g)', round(random.uniform(1.002, 5.004), 4)),
         'PH_METER': ('pH Value', round(random.uniform(6.80, 7.35), 2)),
@@ -686,7 +773,7 @@ def simulate_instrument_read(request, connector_id):
 
     param_name, val = mock_values.get(connector.instrument_type, ('Analytical Reading', round(random.uniform(10.0, 100.0), 2)))
 
-    feed = InstrumentDataFeed.objects.create(
+    InstrumentDataFeed.objects.create(
         connector=connector,
         sample=sample,
         raw_payload=f"HEADER[ASCII];DEV={connector.instrument_tag};PARAM={param_name};RESULT={val};CHK=OK",
@@ -701,3 +788,12 @@ def simulate_instrument_read(request, connector_id):
 
     messages.success(request, f"Acquired reading from {connector.instrument_tag}: {param_name} = {val}")
     return redirect('connector_module')
+
+
+# ==========================================================
+# MODULE 6: AUDIT TRAIL EXPLORER
+# ==========================================================
+@login_required
+def audit_explorer_view(request):
+    logs = UniversalAuditTrail.objects.all().order_by('-timestamp')[:200]
+    return render(request, 'lab/audit_explorer.html', {'logs': logs})

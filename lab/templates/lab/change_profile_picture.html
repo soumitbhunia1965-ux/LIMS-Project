@@ -1,0 +1,36 @@
+{% extends "lab/base.html" %}
+
+{% block content %}
+<div class="container" style="max-width: 520px;">
+    <div class="card shadow-sm border-0 p-4 mt-3">
+        <h4 class="fw-bold mb-3" style="color: #071527;">
+            <i class="bi bi-person-bounding-box text-primary me-2"></i>Change Profile Picture
+        </h4>
+        <p class="text-muted small">Upload your photo or avatar for the analyst signature bar.</p>
+        <hr>
+
+        <div class="text-center mb-3">
+            {% if profile.avatar %}
+                <img src="{{ profile.avatar.url }}" alt="Profile" class="rounded-circle border shadow-sm" style="width: 100px; height: 100px; object-fit: cover;">
+            {% else %}
+                <div class="rounded-circle bg-light border d-inline-flex align-items-center justify-content-center" style="width: 100px; height: 100px;">
+                    <i class="bi bi-person-fill fs-1 text-secondary"></i>
+                </div>
+            {% endif %}
+        </div>
+
+        <form method="POST" enctype="multipart/form-data">
+            {% csrf_token %}
+            <div class="mb-3">
+                <label class="form-label fw-semibold small">Select Image File (.png, .jpg)</label>
+                <input type="file" name="avatar" class="form-control form-control-sm" accept="image/*" required>
+            </div>
+
+            <div class="d-flex justify-content-between align-items-center mt-4">
+                <a href="{% url 'main_hub' %}" class="btn btn-secondary btn-sm">Cancel</a>
+                <button type="submit" class="btn btn-primary btn-sm fw-bold px-4">Upload & Save</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

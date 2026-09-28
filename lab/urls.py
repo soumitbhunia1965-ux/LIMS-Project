@@ -2,11 +2,18 @@ from django.urls import path
 from lab import views
 
 urlpatterns = [
-    # Main Hub
+    # Authentication & User Management
+    path('accounts/login/', views.custom_login_view, name='custom_login'),
+    path('accounts/logout/', views.custom_logout_view, name='custom_logout'),
+    path('accounts/change-password/', views.change_password_view, name='change_password'),
+    path('accounts/change-picture/', views.change_profile_picture_view, name='change_profile_picture'),
+    path('security/configuration/', views.security_config_view, name='security_config'),
+
+    # Portal Hub
     path('', views.main_hub_view, name='main_hub'),
     path('dashboard/', views.main_hub_view, name='dashboard'),
 
-    # Sample Management & Life Cycle
+    # Module 1: Sample Management & Life Cycle
     path('samples/', views.sample_module_view, name='sample_module'),
     path('samples/new/', views.sample_entry_view, name='sample_entry'),
     path('samples/<int:sample_id>/results/', views.enter_results_view, name='enter_results'),
@@ -16,21 +23,21 @@ urlpatterns = [
     path('samples/<int:sample_id>/coa/', views.generate_coa_pdf, name='generate_coa'),
     path('barcode/<str:barcode_data>/', views.generate_barcode_image, name='barcode_image'),
 
-    # Master Data Management (MDM)
+    # Module 2: Master Data Management (MDM)
     path('mdm/', views.mdm_module_view, name='mdm_module'),
 
-    # Instruments & Calibration
+    # Module 3: Instruments & Calibration
     path('instruments/', views.instrument_module_view, name='instrument_module'),
 
-    # Stability Management
+    # Module 4: Stability Management
     path('stability/', views.stability_module_view, name='stability_module'),
     path('stability/pull/<int:timepoint_id>/', views.pull_timepoint_view, name='pull_timepoint'),
 
-    # NEW: Instrument / Interface Connector Module
+    # Module 5: Instrument / Interface Connector
     path('connectors/', views.connector_module_view, name='connector_module'),
     path('connectors/<int:connector_id>/toggle/', views.toggle_connector_status, name='toggle_connector_status'),
     path('connectors/<int:connector_id>/read/', views.simulate_instrument_read, name='simulate_instrument_read'),
 
-    # Universal Audit Trail Explorer
+    # Module 6: Universal Audit Trail Explorer
     path('audit-trail/', views.audit_explorer_view, name='audit_explorer'),
 ]

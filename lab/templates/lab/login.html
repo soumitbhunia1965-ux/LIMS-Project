@@ -1,0 +1,116 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sign into QC LIMS</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <style>
+        body {
+            background-color: #e9ecef;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            font-family: system-ui, -apple-system, sans-serif;
+        }
+        .login-card {
+            width: 100%;
+            max-width: 440px;
+            background: #ffffff;
+            border-radius: 8px;
+            box-shadow: 0 4px 18px rgba(0,0,0,0.12);
+            overflow: hidden;
+            border: 1px solid #ced4da;
+        }
+        .login-header {
+            background: #004d6d;
+            padding: 1.25rem 1.75rem;
+            color: #ffffff;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .login-body {
+            padding: 2rem 2.25rem;
+        }
+        .form-control, .form-select {
+            border-radius: 4px;
+            padding: 0.65rem 0.75rem;
+            border: 1px solid #adb5bd;
+        }
+        .form-control:focus, .form-select:focus {
+            border-color: #004d6d;
+            box-shadow: 0 0 0 0.2rem rgba(0, 77, 109, 0.25);
+        }
+        .btn-signin {
+            background-color: #004d6d;
+            border-color: #004d6d;
+            color: #ffffff;
+            font-weight: 600;
+            padding: 0.6rem 1.5rem;
+            border-radius: 4px;
+        }
+        .btn-signin:hover {
+            background-color: #00364d;
+            border-color: #00364d;
+            color: #ffffff;
+        }
+    </style>
+</head>
+<body>
+
+<div class="login-card">
+    <!-- Header with Lab Logo -->
+    <div class="login-header">
+        <div class="d-flex align-items-center gap-2">
+            <img src="{% static 'lab/lims_logo.png' %}" alt="LIMS Logo" height="32" class="bg-white p-1 rounded">
+            <span class="fs-5 fw-bold font-monospace">QC LIMS</span>
+        </div>
+        <small class="badge bg-light text-dark fw-bold">v6.1 cGMP</small>
+    </div>
+
+    <!-- Login Form Matching LabVantage -->
+    <div class="login-body">
+        <h4 class="fw-bold mb-4" style="color: #212529;">Sign into QC LIMS</h4>
+
+        {% if messages %}
+            {% for message in messages %}
+                <div class="alert alert-danger py-2 small mb-3">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+
+        <form method="POST">
+            {% csrf_token %}
+            <div class="mb-3">
+                <label class="form-label text-muted small fw-bold">Username</label>
+                <input type="text" name="username" class="form-control" placeholder="Enter user ID" required autofocus>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label text-muted small fw-bold">Password</label>
+                <input type="password" name="password" class="form-control" placeholder="Enter password" required>
+            </div>
+
+            <!-- Database / Environment Selector Dropdown -->
+            <div class="mb-4">
+                <label class="form-label text-muted small fw-bold">Database Instance</label>
+                <select name="database_instance" class="form-select">
+                    <option value="QC_PROD" selected>QC Production LIMS</option>
+                    <option value="QC_VAL">Validation / Qualification LIMS</option>
+                    <option value="QC_DEV">Development & Sandbox Instance</option>
+                </select>
+            </div>
+
+            <div class="d-flex align-items-center justify-content-between pt-2">
+                <a href="#" class="text-decoration-none small text-muted">Forgot password?</a>
+                <button type="submit" class="btn btn-signin">Sign in</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+</body>
+</html>

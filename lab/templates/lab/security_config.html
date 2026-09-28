@@ -1,0 +1,54 @@
+{% extends "lab/base.html" %}
+
+{% block content %}
+<div class="row">
+    <!-- Security Module Sidebar Navigation -->
+    <div class="col-md-3">
+        <div class="card shadow-sm border-0 mb-4">
+            <div class="card-header bg-dark text-white fw-bold py-3">
+                <i class="bi bi-shield-check me-2"></i>Security & Configuration
+            </div>
+            <div class="list-group list-group-flush">
+                <a href="#" class="list-group-item list-group-item-action active"><i class="bi bi-people-fill me-2"></i>Users & Roles</a>
+                <a href="#" class="list-group-item list-group-item-action"><i class="bi bi-key me-2"></i>Password Validation</a>
+                <a href="#" class="list-group-item list-group-item-action"><i class="bi bi-building me-2"></i>Departments</a>
+                <a href="#" class="list-group-item list-group-item-action"><i class="bi bi-briefcase me-2"></i>Job Types</a>
+                <a href="#" class="list-group-item list-group-item-action"><i class="bi bi-fingerprint me-2"></i>External Authentication (LDAP / SSO)</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Security Administration Tables -->
+    <div class="col-md-9">
+        <div class="card shadow-sm border-0 p-4">
+            <h4 class="fw-bold mb-3">User Directory & Role Segregation</h4>
+            <table class="table table-hover align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th>Username</th>
+                        <th>Full Name</th>
+                        <th>Email</th>
+                        <th>Role / Segregation</th>
+                        <th>Department</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for u in users %}
+                    <tr>
+                        <td><strong>{{ u.username }}</strong></td>
+                        <td>{{ u.get_full_name|default:"-" }}</td>
+                        <td><small>{{ u.email|default:"qc@company.com" }}</small></td>
+                        <td><span class="badge bg-primary">{{ u.profile.get_role_display|default:"QC Analyst" }}</span></td>
+                        <td><small>{{ u.profile.department.name|default:"Quality Control" }}</small></td>
+                        <td>
+                            {% if u.is_active %}<span class="badge bg-success">Active</span>{% else %}<span class="badge bg-danger">Disabled</span>{% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

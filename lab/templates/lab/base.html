@@ -21,7 +21,6 @@
             margin: 0;
             padding: 0;
         }
-        /* Deep High-Contrast Navy Navigation */
         .navbar-custom {
             background: #071527;
             border-bottom: 2px solid #00c087;
@@ -49,18 +48,54 @@
             background-color: #0d6efd;
             font-weight: 700;
         }
-        .badge-user {
-            background: rgba(255, 255, 255, 0.15);
-            padding: 0.4rem 0.8rem;
+        .user-dropdown-btn {
+            background: rgba(255, 255, 255, 0.12);
+            color: #ffffff !important;
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            padding: 0.38rem 0.85rem;
             border-radius: 20px;
-            color: #ffffff;
             font-size: 0.9rem;
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            text-decoration: none;
+            transition: all 0.2s ease-in-out;
+        }
+        .user-dropdown-btn:hover, 
+        .user-dropdown-btn:focus,
+        .show > .user-dropdown-btn {
+            background: rgba(255, 255, 255, 0.22);
+            color: #ffffff !important;
+            border-color: rgba(255, 255, 255, 0.35);
+        }
+        .user-avatar-circle {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8rem;
+            margin-right: 0.5rem;
+            overflow: hidden;
+            background-color: #0dcaf0;
+            color: #071527;
+        }
+        .dropdown-menu {
+            border-radius: 8px;
+            border: 1px solid #d0d7de;
+        }
+        .dropdown-item {
+            font-size: 0.88rem;
+        }
+        .dropdown-item:hover {
+            background-color: #f1f4f9;
         }
     </style>
 </head>
 <body>
 
-<!-- Deep Navy Fixed Top Navbar -->
+<!-- Navigation Bar -->
 <nav class="navbar navbar-expand-xl navbar-dark navbar-custom shadow sticky-top">
     <div class="container-fluid px-2">
         <a class="navbar-brand d-flex align-items-center me-3" href="{% url 'main_hub' %}">
@@ -111,11 +146,33 @@
                 </li>
             </ul>
 
+            <!-- User Menu & Admin Module -->
             <div class="d-flex align-items-center gap-2">
-                <span class="badge-user">
-                    <i class="bi bi-person-fill text-info me-1"></i>{{ request.user.username }}
-                </span>
-                <a href="/admin/" class="btn btn-warning btn-sm fw-bold px-3" target="_blank">
+                <div class="dropdown">
+                    <a href="#" class="user-dropdown-btn dropdown-toggle" id="userMenuDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                        <span class="user-avatar-circle">
+                            {% if request.user.profile.avatar %}
+                                <img src="{{ request.user.profile.avatar.url }}" alt="Avatar" style="width:100%; height:100%; object-fit:cover;">
+                            {% else %}
+                                <i class="bi bi-person-fill"></i>
+                            {% endif %}
+                        </span>
+                        <span>{{ request.user.username }}</span>
+                    </a>
+                    <ul class="dropdown-menu dropdown-menu-end shadow border-0 mt-2" aria-labelledby="userMenuDropdown" style="min-width: 230px;">
+                        <li class="dropdown-header text-uppercase small fw-bold">Account Settings</li>
+                        <li><a class="dropdown-item py-2" href="{% url 'change_profile_picture' %}"><i class="bi bi-person-bounding-box me-2 text-primary"></i>Change Profile Picture</a></li>
+                        <li><a class="dropdown-item py-2" href="{% url 'change_password' %}"><i class="bi bi-key-fill me-2 text-warning"></i>Change Password</a></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li class="dropdown-header text-uppercase small fw-bold">Administration & Security</li>
+                        <li><a class="dropdown-item py-2" href="{% url 'security_config' %}"><i class="bi bi-shield-lock-fill me-2 text-success"></i>Security & Roles</a></li>
+                        <li><a class="dropdown-item py-2" href="/admin/" target="_blank"><i class="bi bi-gear-wide-connected me-2 text-info"></i>System Admin Console</a></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><a class="dropdown-item py-2 text-danger fw-semibold" href="{% url 'custom_logout' %}"><i class="bi bi-box-arrow-right me-2"></i>Logging Off</a></li>
+                    </ul>
+                </div>
+
+                <a href="/admin/" class="btn btn-warning btn-sm fw-bold px-3 d-flex align-items-center" target="_blank">
                     <i class="bi bi-gear-fill me-1"></i>Admin Module
                 </a>
             </div>
@@ -123,7 +180,7 @@
     </div>
 </nav>
 
-<!-- Page Content -->
+<!-- Page Content Container -->
 <div class="container-fluid px-4 py-4">
     {% if messages %}
         {% for message in messages %}

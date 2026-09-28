@@ -287,3 +287,70 @@ class InstrumentDataFeed(models.Model):
 
     def __str__(self):
         return f"{self.connector.instrument_tag} Feed [{self.received_timestamp:%H:%M:%S}] - {self.extracted_parameter}: {self.extracted_value}"
+    from django.contrib.auth.models import User
+from django.db import models
+from django.utils import timezone
+
+
+# ==========================================================
+# 7. ENTERPRISE SECURITY, PROFILES & DEPARTMENTS (LIMS-LAB Model)
+# ==========================================================
+class Department(models.Model):
+  name = models.CharField(
+      max_length=100, unique=True
+  )  # e.g., Analytical QC, Microbiology, QA
+  code = models.CharField(
+      max_length=20, unique=True
+  )  # e.g., QC-CHEM, QC-MICRO
+  description = models.TextField(blank=True, null=True)
+
+  def __str__(self):
+    return f'{self.code} - {self.name}'
+
+
+class JobType(models.Model):
+  title = models.CharField(
+      max_length=100, unique=True
+  )  # e.g., Senior Chemist, QC Reviewer, QA Officer
+  department = models.ForeignKey(
+      Department, on_delete=models.CASCADE, related_name='job_types'
+  )
+
+  def __str__(self):
+    return f'{self.title} ({self.department.code})'
+
+
+class UserProfile(models.Model):
+  ROLE_CHOICES = [
+      ('ANALYST', 'QC Analyst (Data Entry)'),
+      ('REVIEWER', 'Technical Peer Reviewer'),
+      ('QA_MANAGER', 'QA Release Authority'),
+      ('SYSTEM_ADMIN', 'LIMS System Administrator'),
+  ]
+
+  user = models.OneToOneField(
+      User, on_delete=models.CASCADE, related_name='profile'
+  )
+  department = models.ForeignKey(
+      Department, on_delete=models.SET_NULL, null=True, blank=True
+  )
+  job_type = models.ForeignKey(
+      JobType, on_delete=models.SET_NULL, null=True, blank=True
+  )
+  role = models.CharField(max_length=30, choices=ROLE_CHOICES, default='ANALYST')
+  avatar = models.ImageField(upload_to='avatars/', null=True, blank=True)
+  password_last_changed = models.DateTimeField(default=timezone.now)
+  force_password_change = models.BooleanField(default=False)
+  preferred_theme = models.CharField(
+      max_length=20,
+      default='deep-navy',
+      choices=[('deep-navy', 'Deep Navy High-Contrast'), ('light', 'Light QC')],
+  )
+
+  def is_password_expired(self, max_days=90):
+    return timezone.now() > self.password_last_changed + timezone.timedelta(
+        days=max_days
+    )
+
+  def __str__(self):
+    return f'{self.user.username} - {self.role} ({self.department})'
