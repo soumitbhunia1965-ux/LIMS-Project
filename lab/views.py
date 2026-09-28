@@ -24,7 +24,10 @@ from .models import (
     Sample, TestDefinition, TestResult, UniversalAuditTrail,
     ElectronicSignature, Instrument, StabilityStudy, StabilityTimepoint,
     OOSInvestigation, InstrumentConnector, InstrumentDataFeed,
-    Department, JobType, UserProfile
+    Department, JobType, UserProfile,
+    # Add these Master Data models:
+    Product, Material, TestMethod, SpecificationHeader,
+    SpecificationLine, UnitOfMeasure, StorageCondition, Supplier
 )
 
 
@@ -518,45 +521,136 @@ def generate_coa_pdf(request, sample_id):
     buffer.seek(0)
     return HttpResponse(buffer, content_type='application/pdf')
 
-
 # ==========================================================
-# MODULE 2: MASTER DATA MANAGEMENT (MDM)
+# MODULE 2: ENTERPRISE MASTER DATA MANAGEMENT (MDM)
 # ==========================================================
 @login_required
 def mdm_module_view(request):
-    tests = TestDefinition.objects.all().order_by('name')
+    tab = request.GET.get('tab', 'products')
+
+    products = Product.objects.all().order_by('code')
+    materials = Material.objects.all().order_by('code')
+    methods = TestMethod.objects.all().order_by('method_code')
+    specs = SpecificationHeader.objects.all().order_by('spec_number')
+    suppliers = Supplier.objects.all().order_by('name')
+    storage_conditions = StorageCondition.objects.all()
+    units = UnitOfMeasure.objects.all().order_by('code')
+    legacy_tests = TestDefinition.objects.all().order_by('name')
+
     if request.method == 'POST':
-        name = request.POST.get('name', '').strip()
-        unit = request.POST.get('unit', '').strip()
-        min_lim = request.POST.get('min_limit') or None
-        max_lim = request.POST.get('max_limit') or None
-        change_reason = request.POST.get('reason', 'Master Data Specification addition')
+        action_type = request.POST.get('action_type')
 
-        if TestDefinition.objects.filter(name__iexact=name).exists():
-            messages.error(request, f"Specification '{name}' already exists.")
-            return redirect('mdm_module')
+        # 1. Product Addition
+        if action_type == 'ADD_PRODUCT':
+            code = request.POST.get('code', '').strip().upper()
+            brand = request.POST.get('brand_name', '').strip()
+            generic = request.POST.get('generic_name', '').strip()
+            dosage = request.POST.get('dosage_form')
+            strength = request.POST.get('strength')
+            shelf_life = int(request.POST.get('shelf_life_months') or 24)
 
-        t = TestDefinition.objects.create(
-            name=name,
-            unit=unit,
-            min_limit=float(min_lim) if min_lim else None,
-            max_limit=float(max_lim) if max_lim else None,
-        )
-        UniversalAuditTrail.objects.create(
-            module_name="MDM Specifications",
-            entity_name=t.name,
-            record_id=str(t.id),
-            action='CREATE',
-            field_name="Specification Limits",
-            new_value=f"Min: {min_lim}, Max: {max_lim} {unit}",
-            reason=change_reason,
-            performed_by=request.user
-        )
-        messages.success(request, f"Test definition '{name}' added successfully.")
-        return redirect('mdm_module')
+            p = Product.objects.create(
+                code=code, brand_name=brand, generic_name=generic,
+                dosage_form=dosage, strength=strength, shelf_life_months=shelf_life
+            )
+            UniversalAuditTrail.objects.create(
+                module_name="MDM - Product Master", entity_name=p.code, record_id=str(p.id),
+                action='CREATE', field_name="Product Registration",
+                new_value=f"{brand} ({strength}) - {dosage}", reason="New Product definition", performed_by=request.user
+            )
+            messages.success(request, f"Product '{code}' added to Master Data catalog.")
+            return redirect('/mdm/?tab=products')
 
-    return render(request, 'lab/mdm_module.html', {'tests': tests})
+        # 2. Raw Material Addition
+        elif action_type == 'ADD_MATERIAL':
+            code = request.POST.get('code', '').strip().upper()
+            name = request.POST.get('name', '').strip()
+            mat_type = request.POST.get('material_type')
+            cas = request.POST.get('cas_number', '').strip()
+            grade = request.POST.get('grade', 'USP/NF')
 
+            m = Material.objects.create(
+                code=code, name=name, material_type=mat_type, cas_number=cas, grade=grade
+            )
+            UniversalAuditTrail.objects.create(
+                module_name="MDM - Material Master", entity_name=m.code, record_id=str(m.id),
+                action='CREATE', field_name="Material Registration",
+                new_value=f"{name} ({mat_type})", reason="New Material definition", performed_by=request.user
+            )
+            messages.success(request, f"Raw Material '{code}' registered successfully.")
+            return redirect('/mdm/?tab=materials')
+
+        # 3. Test Method Addition
+        elif action_type == 'ADD_METHOD':
+            code = request.POST.get('method_code', '').strip().upper()
+            title = request.POST.get('title', '').strip()
+            tech = request.POST.get('technique')
+            comp = request.POST.get('compendial_source')
+            sop = request.POST.get('sop_reference')
+
+            tm = TestMethod.objects.create(
+                method_code=code, title=title, technique=tech, compendial_source=comp, sop_reference=sop
+            )
+            UniversalAuditTrail.objects.create(
+                module_name="MDM - Test Methods", entity_name=tm.method_code, record_id=str(tm.id),
+                action='CREATE', field_name="Method Qualification",
+                new_value=f"{title} ({tech})", reason="New Analytical Test Method", performed_by=request.user
+            )
+            messages.success(request, f"Test Method '{code}' qualified and registered.")
+            return redirect('/mdm/?tab=methods')
+
+        # 4. Specification Header Addition
+        elif action_type == 'ADD_SPEC':
+            spec_no = request.POST.get('spec_number', '').strip().upper()
+            title = request.POST.get('title', '').strip()
+            spec_type = request.POST.get('spec_type')
+            prod_id = request.POST.get('product_id')
+            mat_id = request.POST.get('material_id')
+
+            prod = Product.objects.filter(id=prod_id).first() if prod_id else None
+            mat = Material.objects.filter(id=mat_id).first() if mat_id else None
+
+            sh = SpecificationHeader.objects.create(
+                spec_number=spec_no, title=title, spec_type=spec_type, product=prod, material=mat
+            )
+            UniversalAuditTrail.objects.create(
+                module_name="MDM - Specifications", entity_name=sh.spec_number, record_id=str(sh.id),
+                action='CREATE', field_name="Specification Creation",
+                new_value=f"{spec_no}: {title}", reason="New Specification Header", performed_by=request.user
+            )
+            messages.success(request, f"Specification '{spec_no}' approved and registered.")
+            return redirect('/mdm/?tab=specs')
+
+        # 5. Legacy Parameter Addition
+        elif action_type == 'ADD_LEGACY_TEST':
+            name = request.POST.get('name', '').strip()
+            unit = request.POST.get('unit', '').strip()
+            min_lim = request.POST.get('min_limit') or None
+            max_lim = request.POST.get('max_limit') or None
+
+            t = TestDefinition.objects.create(
+                name=name, unit=unit,
+                min_limit=float(min_lim) if min_lim else None,
+                max_limit=float(max_lim) if max_lim else None,
+            )
+            UniversalAuditTrail.objects.create(
+                module_name="MDM - Specifications", entity_name=t.name, record_id=str(t.id),
+                action='CREATE', field_name="Specification Limits",
+                new_value=f"Min: {min_lim}, Max: {max_lim} {unit}", reason="Legacy specification entry", performed_by=request.user
+            )
+            messages.success(request, f"Test parameter '{name}' registered.")
+            return redirect('/mdm/?tab=parameters')
+
+    return render(request, 'lab/mdm_module.html', {
+        'active_tab': tab,
+        'products': products,
+        'materials': materials,
+        'methods': methods,
+        'specs': specs,
+        'suppliers': suppliers,
+        'units': units,
+        'legacy_tests': legacy_tests,
+    })
 
 # ==========================================================
 # MODULE 3: INSTRUMENTS & CALIBRATION

@@ -1,65 +1,483 @@
 {% extends "lab/base.html" %}
 
 {% block content %}
-<div class="row">
-    <!-- List of Existing Specs -->
-    <div class="col-md-7">
-        <div class="card shadow-sm border-0 p-3 mb-4">
-            <h4 class="fw-bold mb-3">Analytical Test Specifications (MDM)</h4>
-            <table class="table table-sm table-hover align-middle">
-                <thead class="table-light">
-                    <tr>
-                        <th>Test Parameter</th>
-                        <th>Unit</th>
-                        <th>Min Spec</th>
-                        <th>Max Spec</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for test in tests %}
-                    <tr>
-                        <td><strong>{{ test.name }}</strong></td>
-                        <td>{{ test.unit }}</td>
-                        <td>{{ test.min_limit|default:"-∞" }}</td>
-                        <td>{{ test.max_limit|default:"+∞" }}</td>
-                    </tr>
-                    {% empty %}
-                    <tr>
-                        <td colspan="4" class="text-center py-3 text-muted">No specifications defined yet.</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h3 class="fw-bold mb-0" style="color: #071527;">
+            <i class="bi bi-database-check text-success me-2"></i>Master Data Management (MDM) Catalog
+        </h3>
+        <p class="text-muted small">
+            Controlled Product Masters, Raw Material Specs, Analytical Test Procedures (STP), and Compendial Acceptance Limits.
+        </p>
+    </div>
+</div>
+
+<!-- Tab Navigation Bar matching the Master Data Excel categories -->
+<ul class="nav nav-pills mb-4 bg-white p-2 rounded shadow-sm border">
+    <li class="nav-item">
+        <a class="nav-link {% if active_tab == 'products' %}active{% endif %} fw-semibold" href="?tab=products">
+            <i class="bi bi-box-seam me-1"></i>Products Master
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link {% if active_tab == 'materials' %}active{% endif %} fw-semibold" href="?tab=materials">
+            <i class="bi bi-layers-half me-1"></i>Materials / APIs
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link {% if active_tab == 'methods' %}active{% endif %} fw-semibold" href="?tab=methods">
+            <i class="bi bi-journal-code me-1"></i>Test Methods (STP)
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link {% if active_tab == 'specs' %}active{% endif %} fw-semibold" href="?tab=specs">
+            <i class="bi bi-card-checklist me-1"></i>Specifications
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link {% if active_tab == 'suppliers' %}active{% endif %} fw-semibold" href="?tab=suppliers">
+            <i class="bi bi-building-check me-1"></i>Suppliers & Manufacturers
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link {% if active_tab == 'parameters' %}active{% endif %} fw-semibold" href="?tab=parameters">
+            <i class="bi bi-sliders me-1"></i>Legacy Test Parameters
+        </a>
+    </li>
+</ul>
+
+<!-- TAB 1: PRODUCT MASTER -->
+{% if active_tab == 'products' %}
+<div class="row g-4">
+    <div class="col-lg-8">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-white py-3">
+                <h5 class="fw-bold mb-0 text-dark">Approved Finished Products</h5>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Product Code</th>
+                            <th>Brand / Trade Name</th>
+                            <th>Dosage Form</th>
+                            <th>Strength</th>
+                            <th>Shelf Life</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for p in products %}
+                        <tr>
+                            <td><strong>{{ p.code }}</strong></td>
+                            <td>{{ p.brand_name }}<br><small class="text-muted">{{ p.generic_name }}</small></td>
+                            <td><span class="badge bg-secondary">{{ p.get_dosage_form_display }}</span></td>
+                            <td><strong>{{ p.strength }}</strong></td>
+                            <td>{{ p.shelf_life_months }} Months</td>
+                            <td><span class="badge bg-success">{{ p.status }}</span></td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="6" class="text-center py-4 text-muted">No finished products defined yet.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
         </div>
     </div>
-
-    <!-- Create New Spec -->
-    <div class="col-md-5">
-        <div class="card shadow-sm border-0 p-4">
-            <h5 class="fw-bold mb-3">+ Register New Test Specification</h5>
+    <div class="col-lg-4">
+        <div class="card shadow-sm border-0 p-4 border-top border-4 border-primary">
+            <h5 class="fw-bold mb-3">+ Register Finished Product</h5>
             <form method="POST">
                 {% csrf_token %}
+                <input type="hidden" name="action_type" value="ADD_PRODUCT">
                 <div class="mb-3">
-                    <label class="form-label">Test Parameter Name</label>
-                    <input type="text" name="name" class="form-control" placeholder="e.g. Assay, Dissolution, pH" required>
+                    <label class="form-label small fw-bold">Product Item Code</label>
+                    <input type="text" name="code" class="form-control" placeholder="e.g. FG-DOLO-650" required>
                 </div>
                 <div class="mb-3">
-                    <label class="form-label">Unit of Measure</label>
-                    <input type="text" name="unit" class="form-control" placeholder="e.g. %, mg/mL, pH units" required>
+                    <label class="form-label small fw-bold">Brand / Commercial Name</label>
+                    <input type="text" name="brand_name" class="form-control" placeholder="e.g. Paracetamol Tablets" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small fw-bold">Generic / Pharmacopoeial Name</label>
+                    <input type="text" name="generic_name" class="form-control" placeholder="e.g. Paracetamol IP/USP" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small fw-bold">Dosage Form</label>
+                    <select name="dosage_form" class="form-select" required>
+                        <option value="TABLET">Tablet</option>
+                        <option value="CAPSULE">Capsule</option>
+                        <option value="INJECTION">Liquid Injectable / Vial</option>
+                        <option value="ORAL_LIQUID">Oral Liquid / Syrup</option>
+                        <option value="TOPICAL">Ointment / Cream</option>
+                    </select>
                 </div>
                 <div class="row mb-3">
                     <div class="col">
-                        <label class="form-label">Min Limit</label>
-                        <input type="number" step="any" name="min_limit" class="form-control" placeholder="-∞">
+                        <label class="form-label small fw-bold">Strength</label>
+                        <input type="text" name="strength" class="form-control" placeholder="e.g. 650 mg" required>
                     </div>
                     <div class="col">
-                        <label class="form-label">Max Limit</label>
-                        <input type="number" step="any" name="max_limit" class="form-control" placeholder="+∞">
+                        <label class="form-label small fw-bold">Shelf Life (Months)</label>
+                        <input type="number" name="shelf_life_months" class="form-control" value="24" required>
                     </div>
                 </div>
-                <button type="submit" class="btn btn-success w-100">Save Specification</button>
+                <button type="submit" class="btn btn-primary w-100 fw-bold">Commit Product to Master Catalog</button>
             </form>
         </div>
     </div>
 </div>
+{% endif %}
+
+<!-- TAB 2: RAW MATERIALS & APIS -->
+{% if active_tab == 'materials' %}
+<div class="row g-4">
+    <div class="col-lg-8">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-white py-3">
+                <h5 class="fw-bold mb-0 text-dark">Controlled Materials & APIs</h5>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Material Code</th>
+                            <th>Material Name</th>
+                            <th>Type</th>
+                            <th>CAS Number</th>
+                            <th>Pharmacopoeial Grade</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for m in materials %}
+                        <tr>
+                            <td><strong>{{ m.code }}</strong></td>
+                            <td>{{ m.name }}</td>
+                            <td><span class="badge bg-info text-dark">{{ m.get_material_type_display }}</span></td>
+                            <td><small class="font-monospace">{{ m.cas_number|default:"-" }}</small></td>
+                            <td>{{ m.grade }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="5" class="text-center py-4 text-muted">No raw materials or APIs registered yet.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="card shadow-sm border-0 p-4 border-top border-4 border-info">
+            <h5 class="fw-bold mb-3">+ Register Material / API</h5>
+            <form method="POST">
+                {% csrf_token %}
+                <input type="hidden" name="action_type" value="ADD_MATERIAL">
+                <div class="mb-3">
+                    <label class="form-label small fw-bold">Material Code</label>
+                    <input type="text" name="code" class="form-control" placeholder="e.g. RM-PARA-001" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small fw-bold">Material Name</label>
+                    <input type="text" name="name" class="form-control" placeholder="e.g. Paracetamol Pure API" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small fw-bold">Material Type</label>
+                    <select name="material_type" class="form-select" required>
+                        <option value="API">Active Pharmaceutical Ingredient (API)</option>
+                        <option value="EXCIPIENT">Raw Material / Excipient</option>
+                        <option value="PRIMARY_PKG">Primary Packaging</option>
+                        <option value="SECONDARY_PKG">Secondary Packaging</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small fw-bold">CAS Registry Number</label>
+                    <input type="text" name="cas_number" class="form-control" placeholder="e.g. 103-90-2">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small fw-bold">Compendial Grade</label>
+                    <input type="text" name="grade" class="form-control" value="USP / Ph. Eur. / IP" required>
+                </div>
+                <button type="submit" class="btn btn-info text-white w-100 fw-bold">Save Material Specification</button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- TAB 3: TEST METHODS (STP) -->
+{% if active_tab == 'methods' %}
+<div class="row g-4">
+    <div class="col-lg-8">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-white py-3">
+                <h5 class="fw-bold mb-0 text-dark">Standard Analytical Test Procedures (STP)</h5>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Method Code</th>
+                            <th>Procedure Title</th>
+                            <th>Technique</th>
+                            <th>Compendium</th>
+                            <th>SOP Ref</th>
+                            <th>Validation</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for m in methods %}
+                        <tr>
+                            <td><strong>{{ m.method_code }}</strong> <small>v{{ m.version }}</small></td>
+                            <td>{{ m.title }}</td>
+                            <td><span class="badge bg-secondary">{{ m.technique }}</span></td>
+                            <td>{{ m.compendial_source }}</td>
+                            <td><small class="font-monospace text-muted">{{ m.sop_reference }}</small></td>
+                            <td><span class="badge bg-success">{{ m.get_validation_status_display }}</span></td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="6" class="text-center py-4 text-muted">No test methods configured yet.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="card shadow-sm border-0 p-4 border-top border-4 border-warning">
+            <h5 class="fw-bold mb-3">+ Register Analytical Method</h5>
+            <form method="POST">
+                {% csrf_token %}
+                <input type="hidden" name="action_type" value="ADD_METHOD">
+                <div class="mb-3">
+                    <label class="form-label small fw-bold">Method STP Code</label>
+                    <input type="text" name="method_code" class="form-control" placeholder="e.g. STP-QC-HPLC-042" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small fw-bold">Method Title</label>
+                    <input type="text" name="title" class="form-control" placeholder="e.g. Assay of Paracetamol by HPLC" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small fw-bold">Analytical Technique</label>
+                    <select name="technique" class="form-select" required>
+                        <option value="HPLC">HPLC (Liquid Chromatography)</option>
+                        <option value="GC">Gas Chromatography (GC)</option>
+                        <option value="UV">UV-Vis Spectrophotometry</option>
+                        <option value="TITRATION">Titrimetry / Potentiometry</option>
+                        <option value="DISSOLUTION">Dissolution Testing</option>
+                        <option value="PHYSICAL">Physical Identification</option>
+                        <option value="MICRO">Microbiology / Bioburden</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small fw-bold">Compendial Source</label>
+                    <input type="text" name="compendial_source" class="form-control" value="USP / Ph. Eur." required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small fw-bold">Internal SOP Document Reference</label>
+                    <input type="text" name="sop_reference" class="form-control" placeholder="SOP-QC-STP-042" required>
+                </div>
+                <button type="submit" class="btn btn-warning text-dark w-100 fw-bold">Publish Method Master</button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- TAB 4: SPECIFICATIONS -->
+{% if active_tab == 'specs' %}
+<div class="row g-4">
+    <div class="col-lg-8">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-white py-3">
+                <h5 class="fw-bold mb-0 text-dark">Master Specifications & Acceptance Criteria</h5>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Spec Number</th>
+                            <th>Title / Scope</th>
+                            <th>Category</th>
+                            <th>Target Entity</th>
+                            <th>Effective Date</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for s in specs %}
+                        <tr>
+                            <td><strong>{{ s.spec_number }}</strong> <small>v{{ s.version }}</small></td>
+                            <td>{{ s.title }}</td>
+                            <td><span class="badge bg-secondary">{{ s.get_spec_type_display }}</span></td>
+                            <td>
+                                {% if s.product %}<strong>Product:</strong> {{ s.product.brand_name }}{% endif %}
+                                {% if s.material %}<strong>Material:</strong> {{ s.material.name }}{% endif %}
+                            </td>
+                            <td>{{ s.effective_date|date:"Y-m-d" }}</td>
+                            <td><span class="badge bg-success">{{ s.status }}</span></td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="6" class="text-center py-4 text-muted">No specifications defined yet.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="card shadow-sm border-0 p-4 border-top border-4 border-success">
+            <h5 class="fw-bold mb-3">+ Create Specification Header</h5>
+            <form method="POST">
+                {% csrf_token %}
+                <input type="hidden" name="action_type" value="ADD_SPEC">
+                <div class="mb-3">
+                    <label class="form-label small fw-bold">Specification Number</label>
+                    <input type="text" name="spec_number" class="form-control" placeholder="e.g. SPEC-FG-DOLO-01" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small fw-bold">Specification Title</label>
+                    <input type="text" name="title" class="form-control" placeholder="e.g. Finished Product Spec for Dolo 650" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small fw-bold">Specification Scope / Purpose</label>
+                    <select name="spec_type" class="form-select" required>
+                        <option value="RELEASE_FG">Finished Product Release Specification</option>
+                        <option value="STABILITY_FG">Finished Product Stability Specification</option>
+                        <option value="RAW_MATERIAL">Raw Material / API Specification</option>
+                        <option value="IN_PROCESS">In-Process Quality Specification</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small fw-bold">Link to Product (Optional)</label>
+                    <select name="product_id" class="form-select">
+                        <option value="">-- None / Material Specification --</option>
+                        {% for p in products %}
+                            <option value="{{ p.id }}">{{ p.code }} - {{ p.brand_name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small fw-bold">Link to Material (Optional)</label>
+                    <select name="material_id" class="form-select">
+                        <option value="">-- None / Product Specification --</option>
+                        {% for m in materials %}
+                            <option value="{{ m.id }}">{{ m.code }} - {{ m.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <button type="submit" class="btn btn-success w-100 fw-bold">Save Master Specification</button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- TAB 5: SUPPLIERS & MANUFACTURERS -->
+{% if active_tab == 'suppliers' %}
+<div class="card shadow-sm border-0">
+    <div class="card-header bg-white py-3">
+        <h5 class="fw-bold mb-0 text-dark">Approved Suppliers & Manufacturing Sites</h5>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>Organization Name</th>
+                    <th>Supplier Classification</th>
+                    <th>Country of Origin</th>
+                    <th>Qualification Audit Status</th>
+                    <th>Email Contact</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for sup in suppliers %}
+                <tr>
+                    <td><strong>{{ sup.name }}</strong></td>
+                    <td><span class="badge bg-secondary">{{ sup.get_supplier_type_display }}</span></td>
+                    <td>{{ sup.country }}</td>
+                    <td>
+                        {% if sup.qualification_status == 'QUALIFIED' %}
+                            <span class="badge bg-success">Qualified & Approved</span>
+                        {% elif sup.qualification_status == 'CONDITIONAL' %}
+                            <span class="badge bg-warning text-dark">Conditional</span>
+                        {% else %}
+                            <span class="badge bg-danger">Disqualified</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ sup.contact_email|default:"-" }}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="5" class="text-center py-4 text-muted">No suppliers registered yet.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+<!-- TAB 6: LEGACY PARAMETERS -->
+{% if active_tab == 'parameters' %}
+<div class="row g-4">
+    <div class="col-lg-8">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-white py-3">
+                <h5 class="fw-bold mb-0 text-dark">Active Analytical Test Parameters</h5>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Parameter Name</th>
+                            <th>Unit</th>
+                            <th>Acceptable Range (Min - Max)</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for t in legacy_tests %}
+                        <tr>
+                            <td><strong>{{ t.name }}</strong></td>
+                            <td>{{ t.unit }}</td>
+                            <td>
+                                <strong>{{ t.min_limit|default:"-Inf" }}</strong> to <strong>{{ t.max_limit|default:"+Inf" }}</strong> {{ t.unit }}
+                            </td>
+                            <td><span class="badge bg-success">Active</span></td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="4" class="text-center py-4 text-muted">No test parameters configured yet.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="card shadow-sm border-0 p-4 border-top border-4 border-primary">
+            <h5 class="fw-bold mb-3">+ Add Test Parameter</h5>
+            <form method="POST">
+                {% csrf_token %}
+                <input type="hidden" name="action_type" value="ADD_LEGACY_TEST">
+                <div class="mb-3">
+                    <label class="form-label small fw-bold">Parameter Name</label>
+                    <input type="text" name="name" class="form-control" placeholder="e.g. Assay (% LC), pH, Dissolution" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small fw-bold">Unit of Measure</label>
+                    <input type="text" name="unit" class="form-control" placeholder="e.g. %, mg/mL, pH units" required>
+                </div>
+                <div class="row mb-3">
+                    <div class="col">
+                        <label class="form-label small fw-bold">Min Limit</label>
+                        <input type="number" step="any" name="min_limit" class="form-control" placeholder="95.0">
+                    </div>
+                    <div class="col">
+                        <label class="form-label small fw-bold">Max Limit</label>
+                        <input type="number" step="any" name="max_limit" class="form-control" placeholder="105.0">
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary w-100 fw-bold">Register Parameter</button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
 {% endblock %}
