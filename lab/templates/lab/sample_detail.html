@@ -1,0 +1,239 @@
+{% extends "lab/base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h3 class="fw-bold mb-0" style="color: #071527;">
+            Sample Cockpit: <span class="text-primary font-monospace">{{ sample.barcode }}</span>
+        </h3>
+        <p class="text-muted small">Batch: <strong>{{ sample.batch_number }}</strong> | Type: {{ sample.get_sample_type_display }} | Purpose: {{ sample.get_purpose_display }}</p>
+    </div>
+    <div class="d-flex gap-2">
+        <button class="btn btn-danger btn-sm fw-semibold" data-bs-toggle="modal" data-bs-target="#holdModal">
+            <i class="bi bi-shield-slash me-1"></i>Place Quality Hold
+        </button>
+        <button class="btn btn-dark btn-sm fw-semibold" data-bs-toggle="modal" data-bs-target="#custodyModal">
+            <i class="bi bi-arrow-left-right me-1"></i>Transfer Custody
+        </button>
+        <a href="{% url 'generate_coa' sample.id %}" target="_blank" class="btn btn-outline-danger btn-sm fw-semibold">
+            <i class="bi bi-file-pdf me-1"></i>Print CoA
+        </a>
+    </div>
+</div>
+
+<!-- Active Quality Hold Warning Banner -->
+{% if sample.has_active_hold %}
+<div class="alert alert-danger shadow-sm border-0 d-flex align-items-center mb-4" role="alert">
+    <i class="bi bi-exclamation-triangle-fill fs-3 me-3"></i>
+    <div>
+        <h5 class="fw-bold mb-0">SAMPLE IS CURRENTLY LOCKED UNDER QUALITY HOLD</h5>
+        <p class="small mb-0">Active holds block analytical approval and batch release. Documented electronic signature required for release.</p>
+    </div>
+</div>
+{% endif %}
+
+<div class="row g-4 mb-4">
+   <!-- Scannable Code 128 Barcode Graphic -->
+            <div class="text-center my-3 p-2 bg-light rounded border">
+                <img src="{% url 'barcode_image' sample.barcode %}" alt="Barcode {{ sample.barcode }}" style="max-height: 55px; max-width: 100%;">
+                <div class="font-monospace small fw-bold text-dark mt-1">{{ sample.barcode }}</div>
+            </div>
+            <p class="mb-1">
+                <strong>Target:</strong> 
+                {% if sample.product %}
+                    {{ sample.product.brand_name }}
+                {% elif sample.material %}
+                    {{ sample.material.name }}
+                {% elif sample.water_detail %}
+                    {{ sample.water_detail.sampling_point }} ({{ sample.water_detail.water_grade }})
+                {% elif sample.environmental_detail %}
+                    {{ sample.environmental_detail.room_id }} ({{ sample.environmental_detail.cleanroom_grade }})
+                {% else %}
+                    General / Unspecified
+                {% endif %}
+            </p>
+            <p class="mb-1"><strong>Quantity:</strong> {{ sample.quantity_collected }} {{ sample.quantity_unit }}</p>
+            <p class="mb-1"><strong>Accessioned By:</strong> {{ sample.logged_by.username }} ({{ sample.received_at|date:"Y-m-d H:i" }})</p>
+        </div>
+    </div>
+
+    <!-- Active Quality Holds -->
+    <div class="col-md-8">
+        <div class="card shadow-sm border-0 h-100 p-3 bg-white">
+            <h6 class="fw-bold text-danger text-uppercase border-bottom pb-2">Quality Holds & Interlocks</h6>
+            <table class="table table-sm align-middle mb-0">
+                <thead>
+                    <tr class="small text-muted">
+                        <th>Hold Type</th>
+                        <th>QMS Reference</th>
+                        <th>Reason</th>
+                        <th>Placed By</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for h in holds %}
+                    <tr>
+                        <td><span class="badge {% if h.is_active %}bg-danger{% else %}bg-secondary{% endif %}">{{ h.get_hold_type_display }}</span></td>
+                        <td><strong>{{ h.qms_reference }}</strong></td>
+                        <td><small>{{ h.reason }}</small></td>
+                        <td>{{ h.placed_by.username }} <small class="text-muted">({{ h.placed_at|date:"m/d H:i" }})</small></td>
+                        <td>
+                            {% if h.is_active %}
+                            <form method="POST" action="{% url 'release_sample_hold' h.id %}" class="d-inline">
+                                {% csrf_token %}
+                                <button type="button" class="btn btn-outline-success btn-sm py-0" data-bs-toggle="modal" data-bs-target="#releaseModal{{ h.id }}">
+                                    Release
+                                </button>
+                                <div class="modal fade" id="releaseModal{{ h.id }}" tabindex="-1">
+                                    <div class="modal-dialog">
+                                        <div class="modal-content">
+                                            <div class="modal-header">
+                                                <h6 class="modal-title fw-bold">Release Hold: {{ h.qms_reference }}</h6>
+                                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                            </div>
+                                            <div class="modal-body text-start">
+                                                <div class="mb-3">
+                                                    <label class="form-label small fw-bold">Release Justification / CAPA Notes</label>
+                                                    <textarea name="justification" class="form-control form-control-sm" rows="2" required></textarea>
+                                                </div>
+                                                <div class="mb-3">
+                                                    <label class="form-label small fw-bold">Signer Password (21 CFR Part 11)</label>
+                                                    <input type="password" name="esign_password" class="form-control form-control-sm" required>
+                                                </div>
+                                            </div>
+                                            <div class="modal-footer">
+                                                <button type="submit" class="btn btn-success btn-sm">Authorize & Release</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </form>
+                            {% else %}
+                                <small class="text-muted">Released by {{ h.released_by.username }}</small>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="5" class="text-center py-3 text-muted">No quality holds recorded.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Chain of Custody History -->
+<div class="card shadow-sm border-0 mb-4 bg-white">
+    <div class="card-header bg-white py-3">
+        <h6 class="fw-bold mb-0 text-dark"><i class="bi bi-clock-history me-2"></i>Chain of Custody Handover Ledger</h6>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-sm table-hover align-middle mb-0 font-monospace" style="font-size: 0.85rem;">
+            <thead class="table-light">
+                <tr>
+                    <th>Timestamp</th>
+                    <th>Transferred By</th>
+                    <th>Received By</th>
+                    <th>Source Location</th>
+                    <th>Destination Location</th>
+                    <th>Seal Intact</th>
+                    <th>Notes</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for c in custody_events %}
+                <tr>
+                    <td>{{ c.transferred_at|date:"Y-m-d H:i" }}</td>
+                    <td><strong>{{ c.released_by.username }}</strong></td>
+                    <td><strong>{{ c.received_by.username }}</strong></td>
+                    <td>{{ c.from_location.location_code|default:"-" }}</td>
+                    <td>{{ c.to_location.location_code|default:"-" }}</td>
+                    <td>{% if c.seal_intact %}<span class="text-success">YES</span>{% else %}<span class="text-danger">BROKEN</span>{% endif %}</td>
+                    <td><small class="text-muted">{{ c.notes|default:"-" }}</small></td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="7" class="text-center py-3 text-muted">No custody transfer recorded. Sample resides with accessioner.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Modal: Place Hold -->
+<div class="modal fade" id="holdModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST" action="{% url 'apply_sample_hold' sample.id %}">
+                {% csrf_token %}
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold text-danger">Place Quality Administrative Hold</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Hold Category</label>
+                        <select name="hold_type" class="form-select form-select-sm" required>
+                            <option value="OOS_INVESTIGATION">OOS Investigation Interlock</option>
+                            <option value="DEVIATION">Linked Production Deviation</option>
+                            <option value="AUDIT_FINDING">QA Regulatory Hold</option>
+                            <option value="TEMPERATURE_EXCURSION">Storage Temperature Excursion</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">QMS / Deviation Reference Number</label>
+                        <input type="text" name="qms_reference" class="form-control form-control-sm" placeholder="e.g. DEV-2026-104" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Root Reason for Quality Interlock</label>
+                        <textarea name="reason" class="form-control form-control-sm" rows="3" required></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="submit" class="btn btn-danger btn-sm fw-bold">Place Hold</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Transfer Custody -->
+<div class="modal fade" id="custodyModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST" action="{% url 'transfer_sample_custody' sample.id %}">
+                {% csrf_token %}
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold">Transfer Sample Custody</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Transfer To Analyst / Officer</label>
+                        <select name="to_user_id" class="form-select form-select-sm" required>
+                            {% for u in users %}
+                                <option value="{{ u.id }}">{{ u.username }} ({{ u.first_name }} {{ u.last_name }})</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Destination Storage Location</label>
+                        <select name="to_location_id" class="form-select form-select-sm" required>
+                            {% for loc in locations %}
+                                <option value="{{ loc.id }}">{{ loc.location_code }} - {{ loc.description }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Handover Notes / Seal Status</label>
+                        <textarea name="notes" class="form-control form-control-sm" placeholder="e.g. Handed over for HPLC assay testing"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="submit" class="btn btn-dark btn-sm fw-bold">Confirm Custody Transfer</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

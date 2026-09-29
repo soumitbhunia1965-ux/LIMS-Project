@@ -1,3 +1,4 @@
+import uuid
 from datetime import datetime, date, timedelta
 from django.db import models
 from django.contrib.auth.models import User
@@ -37,6 +38,8 @@ class ElectronicSignature(models.Model):
         ('APPROVED', 'I approve and release this disposition (QA Release)'),
         ('OOS_INITIATED', 'I initiated this formal OOS investigation'),
         ('OOS_CLOSED', 'I approve and close this OOS investigation'),
+        ('HOLD_PLACED', 'I authorized placing a quality hold'),
+        ('HOLD_RELEASED', 'I authorized releasing the quality hold'),
     ]
 
     module_name = models.CharField(max_length=60)
@@ -52,21 +55,13 @@ class ElectronicSignature(models.Model):
 
 
 # ==========================================================
-# 2. ENTERPRISE MASTER DATA MANAGEMENT (MDM) MODULE
+# 2. MASTER DATA FOUNDATIONS (MDM)
 # ==========================================================
-
 class UnitOfMeasure(models.Model):
     code = models.CharField(max_length=20, unique=True)
     name = models.CharField(max_length=60)
     symbol = models.CharField(max_length=20)
-    category = models.CharField(max_length=40, default='General', choices=[
-        ('Assay/Potency', 'Assay/Potency'),
-        ('Mass/Weight', 'Mass/Weight'),
-        ('Volume', 'Volume'),
-        ('Physical', 'Physical (pH, Viscosity, Density)'),
-        ('Impurity/Trace', 'Impurity/Trace (ppm, ppb, %)'),
-        ('General', 'General')
-    ])
+    category = models.CharField(max_length=40, default='General')
 
     def __str__(self):
         return f"{self.code} ({self.symbol})"
@@ -75,8 +70,8 @@ class UnitOfMeasure(models.Model):
 class StorageCondition(models.Model):
     code = models.CharField(max_length=50, unique=True)
     description = models.CharField(max_length=150)
-    temperature_range = models.CharField(max_length=60, help_text="e.g. 15°C - 25°C or 2°C - 8°C")
-    humidity_range = models.CharField(max_length=60, blank=True, null=True, help_text="e.g. 60% ± 5% RH")
+    temperature_range = models.CharField(max_length=60)
+    humidity_range = models.CharField(max_length=60, blank=True, null=True)
     light_protection = models.BooleanField(default=False)
 
     def __str__(self):
@@ -84,135 +79,72 @@ class StorageCondition(models.Model):
 
 
 class Supplier(models.Model):
-    SUPPLIER_TYPES = [
-        ('MANUFACTURER', 'Actual Manufacturer'),
-        ('DISTRIBUTOR', 'Approved Distributor'),
-        ('SERVICE_LAB', 'Contract Testing Laboratory'),
-    ]
     name = models.CharField(max_length=150, unique=True)
-    supplier_type = models.CharField(max_length=30, choices=SUPPLIER_TYPES, default='MANUFACTURER')
+    supplier_type = models.CharField(max_length=30, default='MANUFACTURER')
     country = models.CharField(max_length=60, default='India')
-    qualification_status = models.CharField(max_length=30, default='QUALIFIED', choices=[
-        ('QUALIFIED', 'Fully Qualified & Approved'),
-        ('CONDITIONAL', 'Conditionally Approved'),
-        ('DISQUALIFIED', 'Disqualified / Blocked'),
-    ])
+    qualification_status = models.CharField(max_length=30, default='QUALIFIED')
     contact_email = models.EmailField(blank=True, null=True)
 
     def __str__(self):
-        return f"{self.name} ({self.get_qualification_status_display()})"
+        return self.name
 
 
 class Product(models.Model):
-    """Finished Goods / Pharmaceutical Formulations"""
     code = models.CharField(max_length=60, unique=True)
     generic_name = models.CharField(max_length=150)
     brand_name = models.CharField(max_length=150)
-    dosage_form = models.CharField(max_length=60, choices=[
-        ('TABLET', 'Tablet'),
-        ('CAPSULE', 'Capsule'),
-        ('INJECTION', 'Liquid Injectable / Vial'),
-        ('ORAL_LIQUID', 'Oral Liquid / Syrup'),
-        ('TOPICAL', 'Ointment / Cream'),
-    ])
-    strength = models.CharField(max_length=60, help_text="e.g. 500 mg, 10 mg/mL")
+    dosage_form = models.CharField(max_length=60, default='TABLET')
+    strength = models.CharField(max_length=60)
     shelf_life_months = models.IntegerField(default=24)
     storage_condition = models.ForeignKey(StorageCondition, on_delete=models.SET_NULL, null=True, blank=True)
-    status = models.CharField(max_length=20, default='APPROVED', choices=[
-        ('DRAFT', 'Draft'), ('APPROVED', 'Approved'), ('OBSOLETE', 'Obsolete')
-    ])
+    status = models.CharField(max_length=20, default='APPROVED')
 
     def __str__(self):
         return f"{self.code} - {self.brand_name} {self.strength}"
 
 
 class Material(models.Model):
-    """Raw Materials, Active Pharmaceutical Ingredients (APIs) & Packaging"""
-    MATERIAL_TYPES = [
-        ('API', 'Active Pharmaceutical Ingredient (API)'),
-        ('EXCIPIENT', 'Raw Material / Excipient'),
-        ('PRIMARY_PKG', 'Primary Packaging Material'),
-        ('SECONDARY_PKG', 'Secondary Packaging'),
-    ]
     code = models.CharField(max_length=60, unique=True)
     name = models.CharField(max_length=150)
-    material_type = models.CharField(max_length=30, choices=MATERIAL_TYPES)
-    cas_number = models.CharField(max_length=40, blank=True, null=True, help_text="CAS Registry Number")
+    material_type = models.CharField(max_length=30)
+    cas_number = models.CharField(max_length=40, blank=True, null=True)
     grade = models.CharField(max_length=40, default='USP/NF/EP/BP')
     primary_supplier = models.ForeignKey(Supplier, on_delete=models.SET_NULL, null=True, blank=True)
     storage_condition = models.ForeignKey(StorageCondition, on_delete=models.SET_NULL, null=True, blank=True)
     retest_period_months = models.IntegerField(default=12)
 
     def __str__(self):
-        return f"{self.code} - {self.name} ({self.material_type})"
+        return f"{self.code} - {self.name}"
 
 
 class TestMethod(models.Model):
-    """Standard Analytical Procedure / STP"""
     method_code = models.CharField(max_length=60, unique=True)
     title = models.CharField(max_length=150)
-    technique = models.CharField(max_length=60, choices=[
-        ('HPLC', 'High Performance Liquid Chromatography (HPLC)'),
-        ('GC', 'Gas Chromatography (GC)'),
-        ('UV', 'UV-Vis Spectrophotometry'),
-        ('TITRATION', 'Potentiometric / Volumetric Titration'),
-        ('DISSOLUTION', 'Dissolution Testing (USP App I/II)'),
-        ('PHYSICAL', 'Physical Appearance & Hardness/Friability'),
-        ('MICRO', 'Microbial Limit Testing'),
-    ])
-    compendial_source = models.CharField(max_length=50, default='In-House / USP', help_text="USP, Ph. Eur., IP, BP, or In-House")
-    sop_reference = models.CharField(max_length=100, help_text="SOP-QC-XXX")
+    technique = models.CharField(max_length=60)
+    compendial_source = models.CharField(max_length=50, default='USP')
+    sop_reference = models.CharField(max_length=100)
     version = models.CharField(max_length=20, default='1.0')
-    validation_status = models.CharField(max_length=30, default='VALIDATED', choices=[
-        ('VALIDATED', 'Validated Protocol'),
-        ('VERIFIED', 'Compendial Verified'),
-        ('TRANSFERRED', 'Method Transferred'),
-    ])
+    validation_status = models.CharField(max_length=30, default='VALIDATED')
 
     def __str__(self):
-        return f"{self.method_code} v{self.version}: {self.title}"
-
-
-# Backward compatibility with existing TestDefinition
-class TestDefinition(models.Model):
-    name = models.CharField(max_length=120, unique=True)
-    unit = models.CharField(max_length=30)
-    min_limit = models.FloatField(null=True, blank=True)
-    max_limit = models.FloatField(null=True, blank=True)
-    method = models.ForeignKey(TestMethod, on_delete=models.SET_NULL, null=True, blank=True)
-    is_active = models.BooleanField(default=True)
-
-    def __str__(self):
-        return f"{self.name} ({self.unit})"
+        return f"{self.method_code} - {self.title}"
 
 
 class SpecificationHeader(models.Model):
-    """Specification Master Binder (Release, Stability, Raw Material)"""
-    SPEC_TYPES = [
-        ('RELEASE_FG', 'Finished Product Release Specification'),
-        ('STABILITY_FG', 'Finished Product Stability Specification'),
-        ('RAW_MATERIAL', 'Raw Material / API Specification'),
-        ('IN_PROCESS', 'In-Process Quality Specification'),
-    ]
     spec_number = models.CharField(max_length=60, unique=True)
     title = models.CharField(max_length=150)
     version = models.CharField(max_length=20, default='1.0')
-    spec_type = models.CharField(max_length=30, choices=SPEC_TYPES)
     product = models.ForeignKey(Product, on_delete=models.SET_NULL, null=True, blank=True)
     material = models.ForeignKey(Material, on_delete=models.SET_NULL, null=True, blank=True)
     effective_date = models.DateField(default=timezone.now)
-    review_date = models.DateField(blank=True, null=True)
-    status = models.CharField(max_length=20, default='APPROVED', choices=[
-        ('DRAFT', 'Draft'), ('IN_REVIEW', 'Under Technical Review'),
-        ('APPROVED', 'Effective / Approved'), ('SUPERSEDED', 'Superseded / Retired')
-    ])
+    status = models.CharField(max_length=20, default='APPROVED')
 
     def __str__(self):
-        return f"{self.spec_number} v{self.version} - {self.title}"
+        return f"{self.spec_number} - {self.title}"
 
 
 class SpecificationLine(models.Model):
-    """Individual Analytical Tests inside a Specification"""
+    """Individual Analytical Tests inside a Specification Header"""
     EVALUATION_TYPES = [
         ('NUMERIC_RANGE', 'Numeric Min / Max Range'),
         ('MIN_ONLY', 'Minimum Limit Only (>=)'),
@@ -233,8 +165,245 @@ class SpecificationLine(models.Model):
         return f"{self.specification.spec_number} - {self.test_parameter}"
 
 
+class TestDefinition(models.Model):
+    name = models.CharField(max_length=120, unique=True)
+    unit = models.CharField(max_length=30)
+    min_limit = models.FloatField(null=True, blank=True)
+    max_limit = models.FloatField(null=True, blank=True)
+    method = models.ForeignKey(TestMethod, on_delete=models.SET_NULL, null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+
+    def __str__(self):
+        return f"{self.name} ({self.unit})"
+
+
 # ==========================================================
-# 3. INSTRUMENT CALIBRATION MODULE
+# 3. ADVANCED SAMPLE MANAGEMENT (From Field Map Architecture)
+# ==========================================================
+class SourceLot(models.Model):
+    """Batch, Supplier Lot & Receipt Identification"""
+    internal_lot_number = models.CharField(max_length=100, unique=True)
+    supplier_lot_number = models.CharField(max_length=100, blank=True, null=True)
+    product = models.ForeignKey(Product, on_delete=models.SET_NULL, null=True, blank=True)
+    material = models.ForeignKey(Material, on_delete=models.SET_NULL, null=True, blank=True)
+    supplier = models.ForeignKey(Supplier, on_delete=models.SET_NULL, null=True, blank=True)
+    manufactured_date = models.DateField(null=True, blank=True)
+    expiry_date = models.DateField(null=True, blank=True)
+    retest_date = models.DateField(null=True, blank=True)
+
+    def __str__(self):
+        return f"Lot: {self.internal_lot_number} (Ref: {self.supplier_lot_number or 'N/A'})"
+
+
+class StorageLocation(models.Model):
+    """Storage hierarchy and condition suitability (Room/Chamber/Freezer/Shelf)"""
+    location_code = models.CharField(max_length=60, unique=True) # e.g. QC-FRZ-02-S1, STAB-CHAMB-40
+    description = models.CharField(max_length=150)
+    location_type = models.CharField(max_length=30, choices=[
+        ('AMBIENT', 'Controlled Ambient (15-25°C)'),
+        ('REFRIGERATED', 'Cold Room / 2-8°C'),
+        ('FREEZER_20', 'Deep Freezer (-20°C)'),
+        ('FREEZER_80', 'Ultra-Low Freezer (-80°C)'),
+        ('STABILITY_CHAMBER', 'Stability Chamber'),
+        ('DISPOSAL_BIN', 'Hazardous Waste / Disposal Queue'),
+    ], default='AMBIENT')
+    capacity_units = models.IntegerField(default=100)
+    is_operational = models.BooleanField(default=True)
+
+    def __str__(self):
+        return f"{self.location_code} ({self.get_location_type_display()})"
+
+
+class Sample(models.Model):
+    SAMPLE_TYPES = [
+        ('FINISHED_PRODUCT', 'Finished Product (Commercial/Clinical)'),
+        ('RAW_MATERIAL', 'Raw Material / API'),
+        ('PACKAGING', 'Packaging Material (Primary/Secondary)'),
+        ('IN_PROCESS', 'In-Process Control (IPC)'),
+        ('WATER', 'Pharmaceutical Water (Purified/WFI)'),
+        ('ENVIRONMENTAL', 'Environmental Monitoring (EM)'),
+        ('STABILITY', 'Stability Study Pull'),
+    ]
+
+    PURPOSES = [
+        ('RELEASE', 'Commercial Batch Release'),
+        ('RETEST', 'Periodic Material Retest'),
+        ('INVESTIGATION', 'OOS / Deviation Investigation'),
+        ('VALIDATION', 'Process / Cleaning Validation'),
+        ('SURVEILLANCE', 'Routine Monitoring'),
+    ]
+
+    STATUS_CHOICES = [
+        ('LOGGED', 'Logged & Accessioned'),
+        ('COLLECTED', 'Sample Collected / Received'),
+        ('IN_PROGRESS', 'In Testing / Analytical Stage'),
+        ('UNDER_REVIEW', 'Under Peer Review'),
+        ('OOS_INVESTIGATION', 'Phase I OOS Investigation'),
+        ('RELEASED', 'QA Released / Approved'),
+        ('REJECTED', 'QA Rejected'),
+        ('HOLD', 'Quality Administrative Hold'),
+    ]
+
+    PRIORITY_CHOICES = [
+        ('NORMAL', 'Routine (Standard TAT)'),
+        ('URGENT', 'Priority / Urgent'),
+        ('CRITICAL', 'Emergency / Line Clearance'),
+    ]
+
+    # Identifiers
+    barcode = models.CharField(max_length=64, unique=True)
+    sample_type = models.CharField(max_length=40, choices=SAMPLE_TYPES, default='FINISHED_PRODUCT')
+    purpose = models.CharField(max_length=40, choices=PURPOSES, default='RELEASE')
+    priority = models.CharField(max_length=20, choices=PRIORITY_CHOICES, default='NORMAL')
+    status = models.CharField(max_length=30, choices=STATUS_CHOICES, default='LOGGED')
+
+    # Linkages
+    product = models.ForeignKey(Product, on_delete=models.SET_NULL, null=True, blank=True)
+    material = models.ForeignKey(Material, on_delete=models.SET_NULL, null=True, blank=True)
+    source_lot = models.ForeignKey(SourceLot, on_delete=models.SET_NULL, null=True, blank=True)
+    batch_number = models.CharField(max_length=100) # Quick index
+    specification = models.ForeignKey(SpecificationHeader, on_delete=models.SET_NULL, null=True, blank=True)
+    current_location = models.ForeignKey(StorageLocation, on_delete=models.SET_NULL, null=True, blank=True)
+
+    # Quantities & Timestamps
+    quantity_collected = models.FloatField(default=1.0)
+    quantity_unit = models.CharField(max_length=20, default='Units')
+    received_at = models.DateTimeField(default=timezone.now)
+    due_date = models.DateField(null=True, blank=True)
+
+    # 21 CFR Part 11 Attribution
+    logged_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='samples_logged')
+    reviewed_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='samples_reviewed')
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    released_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='samples_released')
+    released_at = models.DateTimeField(null=True, blank=True)
+    qa_disposition_notes = models.TextField(blank=True, null=True)
+
+    def has_active_hold(self):
+        return self.holds.filter(is_active=True).exists()
+
+    def overall_result_flag(self):
+        results = self.results.all()
+        if not results.exists():
+            return 'NO_RESULTS'
+        if any(r.status == 'OOS' for r in results):
+            return 'OOS'
+        if all(r.status == 'PASSED' for r in results):
+            return 'PASSED'
+        return 'PENDING'
+
+    def __str__(self):
+        return f"{self.barcode} - {self.get_sample_type_display()} (Lot: {self.batch_number})"
+
+
+# --- Specialized Sample Detail Extensions ---
+class WaterSampleDetail(models.Model):
+    """Context for water monitoring samples (purified water, WFI, clean steam)"""
+    sample = models.OneToOneField(Sample, on_delete=models.CASCADE, related_name='water_detail')
+    sampling_point = models.CharField(max_length=100, help_text="e.g. Loop 1 Point 14 (SP-14)")
+    water_grade = models.CharField(max_length=40, choices=[
+        ('POTABLE', 'Potable Water'),
+        ('PURIFIED', 'Purified Water (USP/EP)'),
+        ('WFI', 'Water for Injection (WFI)'),
+        ('PURE_STEAM', 'Pure Steam Condensate'),
+    ], default='PURIFIED')
+    sampling_mode = models.CharField(max_length=40, choices=[
+        ('PRE_FLUSH', 'Pre-Flush / First Catch'),
+        ('POST_FLUSH', 'Post-Flush (Routine)'),
+        ('AS_USED', 'As-Used Manufacturing Point'),
+    ], default='POST_FLUSH')
+    flush_duration_minutes = models.IntegerField(default=5)
+    sample_temperature_celsius = models.FloatField(default=22.0)
+
+    def __str__(self):
+        return f"{self.sample.barcode} - {self.sampling_point} ({self.water_grade})"
+
+
+class EnvironmentalSampleDetail(models.Model):
+    """Context for environmental monitoring (viable/non-viable)"""
+    sample = models.OneToOneField(Sample, on_delete=models.CASCADE, related_name='environmental_detail')
+    room_id = models.CharField(max_length=100, help_text="e.g. Cleanroom B-102")
+    cleanroom_grade = models.CharField(max_length=20, choices=[
+        ('GRADE_A', 'Grade A (Class 100 / ISO 5)'),
+        ('GRADE_B', 'Grade B (ISO 5 at rest / ISO 7 operational)'),
+        ('GRADE_C', 'Grade C (Class 10,000 / ISO 7)'),
+        ('GRADE_D', 'Grade D (Class 100,000 / ISO 8)'),
+        ('CNC', 'Controlled Non-Classified (CNC)'),
+    ], default='GRADE_B')
+    monitoring_method = models.CharField(max_length=40, choices=[
+        ('ACTIVE_AIR', 'Active Air Sampling (Sieve)'),
+        ('SETTLE_PLATE', 'Passive Settle Plate (4 Hours)'),
+        ('SURFACE_CONTACT', 'Surface Contact (RODAC Plate)'),
+        ('SWAB', 'Surface Swab Sampling'),
+        ('PARTICLE_COUNTER', 'Non-Viable Particle Count'),
+    ], default='SETTLE_PLATE')
+    exposure_start = models.DateTimeField(default=timezone.now)
+    exposure_end = models.DateTimeField(blank=True, null=True)
+
+    def __str__(self):
+        return f"{self.sample.barcode} - {self.room_id} ({self.cleanroom_grade})"
+
+
+class CustodyEvent(models.Model):
+    """Chain of Custody and Handover tracking"""
+    sample = models.ForeignKey(Sample, on_delete=models.CASCADE, related_name='custody_events')
+    released_by = models.ForeignKey(User, on_delete=models.PROTECT, related_name='custody_released')
+    received_by = models.ForeignKey(User, on_delete=models.PROTECT, related_name='custody_received')
+    transferred_at = models.DateTimeField(default=timezone.now)
+    from_location = models.ForeignKey(StorageLocation, on_delete=models.SET_NULL, null=True, related_name='transfers_out')
+    to_location = models.ForeignKey(StorageLocation, on_delete=models.SET_NULL, null=True, related_name='transfers_in')
+    seal_intact = models.BooleanField(default=True)
+    notes = models.TextField(blank=True, null=True)
+
+    def __str__(self):
+        return f"{self.sample.barcode} Custody: {self.released_by} -> {self.received_by} at {self.transferred_at:%Y-%m-%d %H:%M}"
+
+
+class SampleHold(models.Model):
+    """Quality Holds, Deviation Links and Investigation Interlocks"""
+    sample = models.ForeignKey(Sample, on_delete=models.CASCADE, related_name='holds')
+    hold_type = models.CharField(max_length=40, choices=[
+        ('OOS_INVESTIGATION', 'Pending OOS Investigation'),
+        ('DEVIATION', 'Linked Production / Lab Deviation'),
+        ('AUDIT_FINDING', 'QA Regulatory Hold'),
+        ('TEMPERATURE_EXCURSION', 'Cold-Chain / Chamber Excursion'),
+    ], default='OOS_INVESTIGATION')
+    qms_reference = models.CharField(max_length=100, help_text="e.g. DEV-2026-089, OOS-2026-012")
+    reason = models.TextField()
+    is_active = models.BooleanField(default=True)
+    placed_at = models.DateTimeField(default=timezone.now)
+    placed_by = models.ForeignKey(User, on_delete=models.PROTECT, related_name='holds_placed')
+    released_at = models.DateTimeField(null=True, blank=True)
+    released_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='holds_released')
+    release_justification = models.TextField(blank=True, null=True)
+
+    def __str__(self):
+        state = "ACTIVE" if self.is_active else "RELEASED"
+        return f"Hold [{state}] - {self.sample.barcode} ({self.qms_reference})"
+
+
+class RetentionAssignment(models.Model):
+    """Reference & Reserve Sample Retention Management"""
+    RETENTION_CATEGORIES = [
+        ('RESERVE', 'Official Batch Reserve Sample (Finished Goods)'),
+        ('REFERENCE', 'Starting Material Reference Sample'),
+        ('STABILITY', 'Formal Stability Retain'),
+    ]
+    sample = models.OneToOneField(Sample, on_delete=models.CASCADE, related_name='retention')
+    category = models.CharField(max_length=30, choices=RETENTION_CATEGORIES, default='RESERVE')
+    retained_quantity = models.FloatField(default=1.0)
+    quantity_unit = models.CharField(max_length=20, default='Packs')
+    assigned_storage = models.ForeignKey(StorageLocation, on_delete=models.PROTECT)
+    retain_until_date = models.DateField(help_text="Expiry + 1 year (or dossier commitment)")
+    is_disposed = models.BooleanField(default=False)
+    disposed_at = models.DateTimeField(null=True, blank=True)
+
+    def __str__(self):
+        return f"Retain: {self.sample.barcode} ({self.category}) Until {self.retain_until_date}"
+
+
+# ==========================================================
+# 4. INSTRUMENT CALIBRATION MODULE
 # ==========================================================
 class Instrument(models.Model):
     STATUS_CHOICES = [
@@ -263,57 +432,13 @@ class Instrument(models.Model):
             return False
         return self.status == 'CALIBRATED'
 
-    def save(self, *args, **kwargs):
-        if self.calibration_due:
-            due_date = self.get_due_date()
-            self.calibration_due = due_date
-            if timezone.now().date() > due_date:
-                self.status = 'EXPIRED'
-        super().save(*args, **kwargs)
-
     def __str__(self):
         return f"{self.instrument_id} - {self.name} ({self.status})"
 
 
 # ==========================================================
-# 4. SAMPLE LIFE CYCLE, OOS & ANALYTICAL RESULTS
+# 5. TEST RESULTS & OOS INVESTIGATIONS
 # ==========================================================
-class Sample(models.Model):
-    STATUS_CHOICES = [
-        ('LOGGED', 'Logged'),
-        ('IN_PROGRESS', 'In Testing / In Progress'),
-        ('UNDER_REVIEW', 'Under Technical Review'),
-        ('OOS_INVESTIGATION', 'Phase I OOS Investigation'),
-        ('RELEASED', 'QA Released / Approved'),
-        ('REJECTED', 'QA Rejected'),
-    ]
-
-    barcode = models.CharField(max_length=64, unique=True)
-    sample_type = models.CharField(max_length=100)
-    batch_number = models.CharField(max_length=100)
-    received_at = models.DateTimeField(default=timezone.now)
-    status = models.CharField(max_length=30, choices=STATUS_CHOICES, default='LOGGED')
-    logged_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='samples_logged')
-    reviewed_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='samples_reviewed')
-    reviewed_at = models.DateTimeField(null=True, blank=True)
-    released_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='samples_released')
-    released_at = models.DateTimeField(null=True, blank=True)
-    qa_disposition_notes = models.TextField(blank=True, null=True)
-
-    def overall_result_flag(self):
-        results = self.results.all()
-        if not results.exists():
-            return 'NO_RESULTS'
-        if any(r.status == 'OOS' for r in results):
-            return 'OOS'
-        if all(r.status == 'PASSED' for r in results):
-            return 'PASSED'
-        return 'PENDING'
-
-    def __str__(self):
-        return f"{self.barcode} - {self.sample_type} ({self.status})"
-
-
 class TestResult(models.Model):
     STATUS_CHOICES = [
         ('PENDING', 'Pending'),
@@ -343,7 +468,7 @@ class TestResult(models.Model):
         super().save(*args, **kwargs)
 
     def __str__(self):
-        return f"{self.sample.barcode} | {self.test.name}: {self.numeric_value} ({self.status})"
+        return f"{self.sample.barcode} | {self.test.name}: {self.numeric_value}"
 
 
 class OOSInvestigation(models.Model):
@@ -372,7 +497,7 @@ class OOSInvestigation(models.Model):
 
 
 # ==========================================================
-# 5. STABILITY MANAGEMENT MODULE
+# 6. STABILITY MANAGEMENT MODULE
 # ==========================================================
 class StabilityStudy(models.Model):
     study_code = models.CharField(max_length=50, unique=True)
@@ -382,67 +507,36 @@ class StabilityStudy(models.Model):
     protocol_reference = models.CharField(max_length=100)
 
     def __str__(self):
-        return f"{self.study_code} - {self.sample.batch_number} ({self.storage_condition})"
+        return f"{self.study_code} - {self.sample.batch_number}"
 
 
 class StabilityTimepoint(models.Model):
-    PULL_STATUS = [
-        ('SCHEDULED', 'Scheduled'),
-        ('PULLED', 'Pulled from Chamber'),
-        ('TESTED', 'Testing Completed'),
-    ]
-
     study = models.ForeignKey(StabilityStudy, on_delete=models.CASCADE, related_name='timepoints')
     interval_name = models.CharField(max_length=50)
     scheduled_date = models.DateField()
     actual_pull_date = models.DateField(null=True, blank=True)
-    status = models.CharField(max_length=20, choices=PULL_STATUS, default='SCHEDULED')
+    status = models.CharField(max_length=20, default='SCHEDULED')
 
     def __str__(self):
-        return f"{self.study.study_code} - {self.interval_name} ({self.scheduled_date})"
+        return f"{self.study.study_code} - {self.interval_name}"
 
 
 # ==========================================================
-# 6. INSTRUMENT / INTERFACE CONNECTOR MODULE
+# 7. INSTRUMENT / INTERFACE CONNECTOR MODULE
 # ==========================================================
 class InstrumentConnector(models.Model):
-    INSTRUMENT_TYPES = [
-        ('HPLC', 'High-Performance Liquid Chromatography (HPLC)'),
-        ('UPLC', 'Ultra-Performance Liquid Chromatography (UPLC)'),
-        ('GC', 'Gas Chromatography (GC)'),
-        ('BALANCE', 'Analytical Balance (RS-232 / Mettler-Toledo/Sartorius)'),
-        ('PH_METER', 'Digital pH Meter'),
-        ('TOC', 'Total Organic Carbon Analyzer (TOC)'),
-        ('TIMO', 'Automated Titrator (TIMO)'),
-        ('ELN', 'Electronic Lab Notebook Interface (ELN API)'),
-    ]
-
-    INTERFACE_TYPES = [
-        ('TCPIP', 'Direct TCP/IP Network Socket'),
-        ('RS232', 'RS-232 Serial Port (COM)'),
-        ('REST_API', 'RESTful API / Webhook (Waters Empower / OpenLab)'),
-        ('FILE_WATCH', 'File Drop / Hotfolder Watcher'),
-    ]
-
-    CONNECTION_STATUS = [
-        ('ONLINE', 'Connected & Ready'),
-        ('STREAMING', 'Acquiring / Reading Live'),
-        ('OFFLINE', 'Disconnected / Unreachable'),
-        ('ERROR', 'Interface Communication Fault'),
-    ]
-
     instrument_tag = models.CharField(max_length=60, unique=True)
     instrument_name = models.CharField(max_length=150)
-    instrument_type = models.CharField(max_length=30, choices=INSTRUMENT_TYPES)
-    interface_type = models.CharField(max_length=20, choices=INTERFACE_TYPES)
+    instrument_type = models.CharField(max_length=30)
+    interface_type = models.CharField(max_length=20)
     ip_or_com_port = models.CharField(max_length=100)
     baud_rate = models.IntegerField(default=9600, blank=True, null=True)
-    status = models.CharField(max_length=20, choices=CONNECTION_STATUS, default='OFFLINE')
+    status = models.CharField(max_length=20, default='OFFLINE')
     last_ping = models.DateTimeField(null=True, blank=True)
     is_active = models.BooleanField(default=True)
 
     def __str__(self):
-        return f"{self.instrument_tag} ({self.get_instrument_type_display()}) - {self.status}"
+        return f"{self.instrument_tag} - {self.status}"
 
 
 class InstrumentDataFeed(models.Model):
@@ -455,11 +549,11 @@ class InstrumentDataFeed(models.Model):
     processed = models.BooleanField(default=False)
 
     def __str__(self):
-        return f"{self.connector.instrument_tag} Feed [{self.received_timestamp:%H:%M:%S}] - {self.extracted_parameter}: {self.extracted_value}"
+        return f"{self.connector.instrument_tag}: {self.extracted_parameter} = {self.extracted_value}"
 
 
 # ==========================================================
-# 7. ENTERPRISE SECURITY, PROFILES & DEPARTMENTS
+# 8. ENTERPRISE SECURITY & PROFILES
 # ==========================================================
 class Department(models.Model):
     name = models.CharField(max_length=100, unique=True)
@@ -479,17 +573,10 @@ class JobType(models.Model):
 
 
 class UserProfile(models.Model):
-    ROLE_CHOICES = [
-        ('ANALYST', 'QC Analyst (Data Entry)'),
-        ('REVIEWER', 'Technical Peer Reviewer'),
-        ('QA_MANAGER', 'QA Release Authority'),
-        ('SYSTEM_ADMIN', 'LIMS System Administrator'),
-    ]
-
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
     department = models.ForeignKey(Department, on_delete=models.SET_NULL, null=True, blank=True)
     job_type = models.ForeignKey(JobType, on_delete=models.SET_NULL, null=True, blank=True)
-    role = models.CharField(max_length=30, choices=ROLE_CHOICES, default='ANALYST')
+    role = models.CharField(max_length=30, default='ANALYST')
     avatar = models.ImageField(upload_to='avatars/', null=True, blank=True)
     password_last_changed = models.DateTimeField(default=timezone.now)
     force_password_change = models.BooleanField(default=False)

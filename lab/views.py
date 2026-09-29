@@ -1,7 +1,7 @@
 import io
 import csv
 import random
-from datetime import datetime, timedelta
+from datetime import datetime, date, timedelta
 import barcode
 from barcode.writer import ImageWriter
 
@@ -11,6 +11,7 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, Tabl
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 
 from django import forms
+from django.db import models
 from django.http import HttpResponse
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import authenticate, login, logout, update_session_auth_hash
@@ -21,18 +22,52 @@ from django.contrib import messages
 from django.utils import timezone
 
 from .models import (
+    # Core & Compliance
     Sample, TestDefinition, TestResult, UniversalAuditTrail,
     ElectronicSignature, Instrument, StabilityStudy, StabilityTimepoint,
     OOSInvestigation, InstrumentConnector, InstrumentDataFeed,
     Department, JobType, UserProfile,
-    # Add these Master Data models:
-    Product, Material, TestMethod, SpecificationHeader,
-    SpecificationLine, UnitOfMeasure, StorageCondition, Supplier
+    # Master Data Management (MDM)
+    UnitOfMeasure, StorageCondition, Supplier, Product,
+    Material, TestMethod, SpecificationHeader, SpecificationLine,
+    # Advanced Sample Management & Traceability
+    SourceLot, StorageLocation, WaterSampleDetail, EnvironmentalSampleDetail,
+    CustodyEvent, SampleHold, RetentionAssignment
 )
 
 
 # ==========================================================
-# 0. AUTHENTICATION, PROFILE & SECURITY CONFIGURATION
+# 0. 21 CFR PART 11 ELECTRONIC SIGNATURE VERIFICATION HELPER
+# ==========================================================
+def verify_electronic_signature(request, record_reference, module_name, meaning, reason):
+    password = request.POST.get('esign_password', '').strip()
+    user = authenticate(username=request.user.username, password=password)
+    if not user:
+        return False, "Electronic Signature Verification Failed: Invalid credentials provided."
+
+    ElectronicSignature.objects.create(
+        module_name=module_name,
+        record_reference=record_reference,
+        meaning=meaning,
+        signer=request.user,
+        signer_full_name=f"{request.user.first_name} {request.user.last_name}".strip() or request.user.username,
+        reason=reason
+    )
+    UniversalAuditTrail.objects.create(
+        module_name=module_name,
+        entity_name=record_reference,
+        record_id=record_reference,
+        action='SIGN',
+        field_name='ElectronicSignature',
+        new_value=f"Signed: {meaning}",
+        reason=reason,
+        performed_by=request.user
+    )
+    return True, "Electronic signature authenticated and recorded."
+
+
+# ==========================================================
+# 1. AUTHENTICATION & SECURITY CONFIGURATION
 # ==========================================================
 def custom_login_view(request):
     if request.user.is_authenticated:
@@ -54,8 +89,8 @@ def custom_login_view(request):
                 record_id=str(user.id),
                 action='CREATE',
                 field_name="Logon",
-                new_value=f"User session started in instance: {selected_db}",
-                reason="Interactive logon verification",
+                new_value=f"User session initiated in database instance: {selected_db}",
+                reason="Routine user authentication",
                 performed_by=user
             )
             return redirect('main_hub')
@@ -73,8 +108,8 @@ def custom_logout_view(request):
             record_id=str(request.user.id),
             action='UPDATE',
             field_name="Logging Off",
-            new_value="User session terminated",
-            reason="User initiated logout",
+            new_value="User session ended",
+            reason="User initiated logoff",
             performed_by=request.user
         )
         logout(request)
@@ -100,14 +135,14 @@ def change_password_view(request):
                 record_id=str(user.id),
                 action='UPDATE',
                 field_name="Password",
-                new_value="Password changed per 21 CFR Part 11 policy",
+                new_value="Password changed compliant with 21 CFR Part 11 policy",
                 reason="User self-service password update",
                 performed_by=user
             )
             messages.success(request, "Your password was successfully updated!")
             return redirect('main_hub')
         else:
-            messages.error(request, "Please correct the error below.")
+            messages.error(request, "Please correct the password requirements error below.")
     else:
         form = PasswordChangeForm(request.user)
 
@@ -146,36 +181,8 @@ def security_config_view(request):
     })
 
 
-# Electronic Signature Verification Helper
-def verify_electronic_signature(request, record_reference, module_name, meaning, reason):
-    password = request.POST.get('esign_password', '').strip()
-    user = authenticate(username=request.user.username, password=password)
-    if not user:
-        return False, "Electronic Signature Failed: Invalid password. 21 CFR Part 11 requires credential verification."
-
-    ElectronicSignature.objects.create(
-        module_name=module_name,
-        record_reference=record_reference,
-        meaning=meaning,
-        signer=request.user,
-        signer_full_name=f"{request.user.first_name} {request.user.last_name}".strip() or request.user.username,
-        reason=reason
-    )
-    UniversalAuditTrail.objects.create(
-        module_name=module_name,
-        entity_name=record_reference,
-        record_id=record_reference,
-        action='SIGN',
-        field_name='ElectronicSignature',
-        new_value=f"Signed: {meaning}",
-        reason=reason,
-        performed_by=request.user
-    )
-    return True, "Signature captured successfully."
-
-
 # ==========================================================
-# MAIN HUB DASHBOARD
+# 2. MAIN HUB DASHBOARD
 # ==========================================================
 @login_required
 def main_hub_view(request):
@@ -198,57 +205,260 @@ def main_hub_view(request):
 
 
 # ==========================================================
-# MODULE 1: SAMPLE MANAGEMENT & RESULTS
+# 3. ADVANCED SAMPLE MANAGEMENT & WORKLIST
 # ==========================================================
 @login_required
 def sample_module_view(request):
     query = request.GET.get('q', '').strip()
     status_filter = request.GET.get('status', '').strip()
+    type_filter = request.GET.get('sample_type', '').strip()
+    hold_filter = request.GET.get('hold', '').strip()
 
-    samples = Sample.objects.all().order_by('-received_at')
+    samples = Sample.objects.all().select_related('product', 'material', 'current_location', 'source_lot').order_by('-received_at')
+
     if query:
-        samples = samples.filter(barcode__icontains=query) | samples.filter(batch_number__icontains=query)
+        samples = samples.filter(
+            models.Q(barcode__icontains=query) |
+            models.Q(batch_number__icontains=query) |
+            models.Q(product__brand_name__icontains=query) |
+            models.Q(material__name__icontains=query)
+        )
     if status_filter:
         samples = samples.filter(status=status_filter)
+    if type_filter:
+        samples = samples.filter(sample_type=type_filter)
+    if hold_filter == 'YES':
+        samples = samples.filter(holds__is_active=True).distinct()
+
+    locations = StorageLocation.objects.filter(is_operational=True)
 
     return render(request, 'lab/sample_module.html', {
         'samples': samples,
         'query': query,
-        'status_filter': status_filter
+        'status_filter': status_filter,
+        'type_filter': type_filter,
+        'hold_filter': hold_filter,
+        'locations': locations,
     })
 
 
 @login_required
 def sample_entry_view(request):
+    products = Product.objects.filter(status='APPROVED')
+    materials = Material.objects.all()
+    specs = SpecificationHeader.objects.filter(status='APPROVED')
+    locations = StorageLocation.objects.filter(is_operational=True)
+    suppliers = Supplier.objects.all()
+
     if request.method == 'POST':
         barcode_val = request.POST.get('barcode', '').strip()
-        sample_type = request.POST.get('sample_type', '').strip()
-        batch_number = request.POST.get('batch_number', '').strip()
+        sample_type = request.POST.get('sample_type')
+        purpose = request.POST.get('purpose', 'RELEASE')
+        priority = request.POST.get('priority', 'NORMAL')
+        batch_no = request.POST.get('batch_number', '').strip()
+        qty = float(request.POST.get('quantity_collected', 1.0))
+        qty_unit = request.POST.get('quantity_unit', 'Units')
+        spec_id = request.POST.get('specification_id')
+        location_id = request.POST.get('location_id')
+        due_date_str = request.POST.get('due_date')
 
         if Sample.objects.filter(barcode=barcode_val).exists():
             messages.error(request, f"Sample with barcode '{barcode_val}' already exists.")
-            return render(request, 'lab/sample_entry.html')
+            return redirect('sample_entry')
 
-        s = Sample.objects.create(
+        prod_id = request.POST.get('product_id')
+        mat_id = request.POST.get('material_id')
+        product_obj = Product.objects.filter(id=prod_id).first() if prod_id else None
+        material_obj = Material.objects.filter(id=mat_id).first() if mat_id else None
+        spec_obj = SpecificationHeader.objects.filter(id=spec_id).first() if spec_id else None
+        loc_obj = StorageLocation.objects.filter(id=location_id).first() if location_id else None
+
+        lot_obj, _ = SourceLot.objects.get_or_create(
+            internal_lot_number=batch_no,
+            defaults={
+                'product': product_obj,
+                'material': material_obj,
+                'supplier_lot_number': request.POST.get('supplier_lot', ''),
+            }
+        )
+
+        sample = Sample.objects.create(
             barcode=barcode_val,
             sample_type=sample_type,
-            batch_number=batch_number,
-            logged_by=request.user
+            purpose=purpose,
+            priority=priority,
+            batch_number=batch_no,
+            product=product_obj,
+            material=material_obj,
+            source_lot=lot_obj,
+            specification=spec_obj,
+            current_location=loc_obj,
+            quantity_collected=qty,
+            quantity_unit=qty_unit,
+            due_date=datetime.strptime(due_date_str, '%Y-%m-%d').date() if due_date_str else None,
+            logged_by=request.user,
+            status='LOGGED'
         )
+
+        if sample_type == 'WATER':
+            WaterSampleDetail.objects.create(
+                sample=sample,
+                sampling_point=request.POST.get('water_point', 'SP-01'),
+                water_grade=request.POST.get('water_grade', 'PURIFIED'),
+                sampling_mode=request.POST.get('sampling_mode', 'POST_FLUSH'),
+                flush_duration_minutes=int(request.POST.get('flush_minutes') or 5),
+            )
+        elif sample_type == 'ENVIRONMENTAL':
+            EnvironmentalSampleDetail.objects.create(
+                sample=sample,
+                room_id=request.POST.get('em_room', 'Cleanroom-01'),
+                cleanroom_grade=request.POST.get('cleanroom_grade', 'GRADE_B'),
+                monitoring_method=request.POST.get('em_method', 'SETTLE_PLATE'),
+            )
+
         UniversalAuditTrail.objects.create(
-            module_name="Sample Management",
-            entity_name=s.barcode,
-            record_id=str(s.id),
+            module_name="Sample Accessioning",
+            entity_name=sample.barcode,
+            record_id=str(sample.id),
             action='CREATE',
-            field_name="Sample Registration",
-            new_value=f"Type: {sample_type}, Batch: {batch_number}",
-            reason="Sample registration and accessioning",
+            field_name="Registration",
+            new_value=f"Type: {sample_type}, Batch: {batch_no}, Priority: {priority}",
+            reason="Sample accessioning and lot linkage",
             performed_by=request.user
         )
-        messages.success(request, f"Sample '{barcode_val}' logged successfully.")
+
+        messages.success(request, f"Sample '{barcode_val}' accessioned successfully into {loc_obj or 'Receiving'}.")
         return redirect('sample_module')
 
-    return render(request, 'lab/sample_entry.html')
+    return render(request, 'lab/sample_entry.html', {
+        'products': products,
+        'materials': materials,
+        'specs': specs,
+        'locations': locations,
+        'suppliers': suppliers,
+    })
+
+
+@login_required
+def sample_detail_view(request, sample_id):
+    sample = get_object_or_404(Sample.objects.select_related('product', 'material', 'source_lot', 'current_location'), id=sample_id)
+    holds = sample.holds.all().order_by('-placed_at')
+    custody_events = sample.custody_events.all().order_by('-transferred_at')
+    results = sample.results.all().select_related('test', 'instrument', 'analyst')
+    locations = StorageLocation.objects.filter(is_operational=True)
+    users = User.objects.filter(is_active=True)
+
+    return render(request, 'lab/sample_detail.html', {
+        'sample': sample,
+        'holds': holds,
+        'custody_events': custody_events,
+        'results': results,
+        'locations': locations,
+        'users': users,
+    })
+
+
+@login_required
+def apply_sample_hold_view(request, sample_id):
+    sample = get_object_or_404(Sample, id=sample_id)
+    if request.method == 'POST':
+        hold_type = request.POST.get('hold_type')
+        qms_ref = request.POST.get('qms_reference')
+        reason = request.POST.get('reason')
+
+        SampleHold.objects.create(
+            sample=sample,
+            hold_type=hold_type,
+            qms_reference=qms_ref,
+            reason=reason,
+            placed_by=request.user,
+            is_active=True
+        )
+        sample.status = 'HOLD'
+        sample.save()
+
+        UniversalAuditTrail.objects.create(
+            module_name="Quality Hold",
+            entity_name=sample.barcode,
+            record_id=str(sample.id),
+            action='UPDATE',
+            field_name="Quality Hold Placed",
+            new_value=f"{hold_type}: {qms_ref} - {reason}",
+            reason=reason,
+            performed_by=request.user
+        )
+        messages.warning(request, f"Quality Hold placed on {sample.barcode} ({qms_ref}). Testing progression interlocked.")
+    return redirect('sample_detail', sample_id=sample.id)
+
+
+@login_required
+def release_sample_hold_view(request, hold_id):
+    hold = get_object_or_404(SampleHold, id=hold_id)
+    sample = hold.sample
+    if request.method == 'POST':
+        justification = request.POST.get('justification')
+        valid, msg = verify_electronic_signature(
+            request,
+            record_reference=f"HOLD-REL-{sample.barcode}",
+            module_name="Quality Hold",
+            meaning='HOLD_RELEASED',
+            reason=justification
+        )
+        if not valid:
+            messages.error(request, msg)
+            return redirect('sample_detail', sample_id=sample.id)
+
+        hold.is_active = False
+        hold.released_at = timezone.now()
+        hold.released_by = request.user
+        hold.release_justification = justification
+        hold.save()
+
+        if not sample.has_active_hold():
+            sample.status = 'IN_PROGRESS' if sample.results.exists() else 'LOGGED'
+            sample.save()
+
+        messages.success(request, f"Quality Hold {hold.qms_reference} released for sample {sample.barcode}.")
+    return redirect('sample_detail', sample_id=sample.id)
+
+
+@login_required
+def transfer_sample_custody_view(request, sample_id):
+    sample = get_object_or_404(Sample, id=sample_id)
+    if request.method == 'POST':
+        to_user_id = request.POST.get('to_user_id')
+        to_loc_id = request.POST.get('to_location_id')
+        notes = request.POST.get('notes', '')
+
+        to_user = get_object_or_404(User, id=to_user_id)
+        to_loc = StorageLocation.objects.filter(id=to_loc_id).first() if to_loc_id else None
+
+        CustodyEvent.objects.create(
+            sample=sample,
+            released_by=request.user,
+            received_by=to_user,
+            from_location=sample.current_location,
+            to_location=to_loc,
+            notes=notes
+        )
+
+        old_loc = str(sample.current_location)
+        sample.current_location = to_loc
+        sample.save()
+
+        UniversalAuditTrail.objects.create(
+            module_name="Chain of Custody",
+            entity_name=sample.barcode,
+            record_id=str(sample.id),
+            action='UPDATE',
+            field_name="Custody Handover",
+            old_value=f"From {request.user.username} at {old_loc}",
+            new_value=f"To {to_user.username} at {to_loc}",
+            reason=notes or "Routine custody handover",
+            performed_by=request.user
+        )
+        messages.success(request, f"Custody of {sample.barcode} transferred to {to_user.username}.")
+    return redirect('sample_detail', sample_id=sample.id)
 
 
 @login_required
@@ -262,6 +472,10 @@ def generate_barcode_image(request, barcode_data):
 @login_required
 def enter_results_view(request, sample_id):
     sample = get_object_or_404(Sample, id=sample_id)
+    if sample.has_active_hold():
+        messages.error(request, "Access Denied: Cannot enter results for a sample under active Quality Hold.")
+        return redirect('sample_detail', sample_id=sample.id)
+
     tests = TestDefinition.objects.filter(is_active=True)
     calibrated_instruments = Instrument.objects.filter(status='CALIBRATED')
 
@@ -322,10 +536,19 @@ def enter_results_view(request, sample_id):
         if has_oos or sample.overall_result_flag() == 'OOS':
             sample.status = 'OOS_INVESTIGATION'
             OOSInvestigation.objects.get_or_create(sample=sample, defaults={'initiated_by': request.user})
-            messages.warning(request, "Out-of-Specification detected! Sample transitioned to OOS Phase I Investigation.")
+            SampleHold.objects.get_or_create(
+                sample=sample,
+                hold_type='OOS_INVESTIGATION',
+                defaults={
+                    'qms_reference': f"OOS-{sample.barcode}",
+                    'reason': "Automatic interlock triggered by out-of-specification result",
+                    'placed_by': request.user,
+                }
+            )
+            messages.warning(request, "Out-of-Specification detected! Quality Hold and Phase I Investigation initiated.")
         else:
             sample.status = 'UNDER_REVIEW'
-            messages.success(request, "Testing completed. Sample submitted for Technical Peer Review.")
+            messages.success(request, "Testing completed. Sample queued for Technical Peer Review.")
 
         sample.save()
         return redirect('sample_module')
@@ -345,9 +568,8 @@ def enter_results_view(request, sample_id):
 @login_required
 def technical_review_view(request, sample_id):
     sample = get_object_or_404(Sample, id=sample_id)
-
     if sample.logged_by == request.user:
-        messages.error(request, "Segregation of Duties Violation: You cannot review a sample you logged/tested.")
+        messages.error(request, "Segregation of Duties Violation: Reviewer cannot be the same user who logged/accessioned the sample.")
         return redirect('sample_module')
 
     if request.method == 'POST':
@@ -376,10 +598,13 @@ def technical_review_view(request, sample_id):
 @login_required
 def qa_release_view(request, sample_id):
     sample = get_object_or_404(Sample, id=sample_id)
-
     if request.user in [sample.logged_by, sample.reviewed_by]:
         messages.error(request, "Segregation of Duties Violation: QA Release must be performed by an independent QA authority.")
         return redirect('sample_module')
+
+    if sample.has_active_hold():
+        messages.error(request, "Compliance Violation: Cannot approve or release a sample with active Quality Holds.")
+        return redirect('sample_detail', sample_id=sample.id)
 
     if request.method == 'POST':
         decision = request.POST.get('decision')
@@ -439,10 +664,10 @@ def oos_investigation_view(request, sample_id):
 
         if investigation.status == 'LAB_ERROR_CONFIRMED':
             sample.status = 'IN_PROGRESS'
-            messages.info(request, "Lab Error identified. Sample returned for re-testing under protocol.")
+            messages.info(request, "Lab Error confirmed. Sample returned to testing under protocol.")
         else:
             sample.status = 'REJECTED'
-            messages.error(request, "True Out of Specification confirmed. Batch marked as REJECTED.")
+            messages.error(request, "Confirmed Manufacturing OOS. Sample marked REJECTED.")
 
         sample.save()
         return redirect('sample_module')
@@ -470,7 +695,7 @@ def generate_coa_pdf(request, sample_id):
     meta_data = [
         [Paragraph(f"<b>Sample Barcode:</b> {sample.barcode}", styles['Normal']),
          Paragraph(f"<b>Batch No:</b> {sample.batch_number}", styles['Normal'])],
-        [Paragraph(f"<b>Sample Type:</b> {sample.sample_type}", styles['Normal']),
+        [Paragraph(f"<b>Sample Type:</b> {sample.get_sample_type_display()}", styles['Normal']),
          Paragraph(f"<b>Life Cycle Status:</b> {sample.get_status_display()}", styles['Normal'])],
         [Paragraph(f"<b>Technical Reviewer:</b> {reviewer_str}", styles['Normal']),
          Paragraph(f"<b>QA Release Authority:</b> {qa_str}", styles['Normal'])],
@@ -521,8 +746,9 @@ def generate_coa_pdf(request, sample_id):
     buffer.seek(0)
     return HttpResponse(buffer, content_type='application/pdf')
 
+
 # ==========================================================
-# MODULE 2: ENTERPRISE MASTER DATA MANAGEMENT (MDM)
+# 4. ENTERPRISE MASTER DATA MANAGEMENT (MDM)
 # ==========================================================
 @login_required
 def mdm_module_view(request):
@@ -533,14 +759,12 @@ def mdm_module_view(request):
     methods = TestMethod.objects.all().order_by('method_code')
     specs = SpecificationHeader.objects.all().order_by('spec_number')
     suppliers = Supplier.objects.all().order_by('name')
-    storage_conditions = StorageCondition.objects.all()
     units = UnitOfMeasure.objects.all().order_by('code')
     legacy_tests = TestDefinition.objects.all().order_by('name')
 
     if request.method == 'POST':
         action_type = request.POST.get('action_type')
 
-        # 1. Product Addition
         if action_type == 'ADD_PRODUCT':
             code = request.POST.get('code', '').strip().upper()
             brand = request.POST.get('brand_name', '').strip()
@@ -556,12 +780,11 @@ def mdm_module_view(request):
             UniversalAuditTrail.objects.create(
                 module_name="MDM - Product Master", entity_name=p.code, record_id=str(p.id),
                 action='CREATE', field_name="Product Registration",
-                new_value=f"{brand} ({strength}) - {dosage}", reason="New Product definition", performed_by=request.user
+                new_value=f"{brand} ({strength}) - {dosage}", reason="New product master registration", performed_by=request.user
             )
             messages.success(request, f"Product '{code}' added to Master Data catalog.")
             return redirect('/mdm/?tab=products')
 
-        # 2. Raw Material Addition
         elif action_type == 'ADD_MATERIAL':
             code = request.POST.get('code', '').strip().upper()
             name = request.POST.get('name', '').strip()
@@ -575,12 +798,11 @@ def mdm_module_view(request):
             UniversalAuditTrail.objects.create(
                 module_name="MDM - Material Master", entity_name=m.code, record_id=str(m.id),
                 action='CREATE', field_name="Material Registration",
-                new_value=f"{name} ({mat_type})", reason="New Material definition", performed_by=request.user
+                new_value=f"{name} ({mat_type})", reason="New raw material specification", performed_by=request.user
             )
             messages.success(request, f"Raw Material '{code}' registered successfully.")
             return redirect('/mdm/?tab=materials')
 
-        # 3. Test Method Addition
         elif action_type == 'ADD_METHOD':
             code = request.POST.get('method_code', '').strip().upper()
             title = request.POST.get('title', '').strip()
@@ -594,16 +816,14 @@ def mdm_module_view(request):
             UniversalAuditTrail.objects.create(
                 module_name="MDM - Test Methods", entity_name=tm.method_code, record_id=str(tm.id),
                 action='CREATE', field_name="Method Qualification",
-                new_value=f"{title} ({tech})", reason="New Analytical Test Method", performed_by=request.user
+                new_value=f"{title} ({tech})", reason="Standard test method qualification", performed_by=request.user
             )
             messages.success(request, f"Test Method '{code}' qualified and registered.")
             return redirect('/mdm/?tab=methods')
 
-        # 4. Specification Header Addition
         elif action_type == 'ADD_SPEC':
             spec_no = request.POST.get('spec_number', '').strip().upper()
             title = request.POST.get('title', '').strip()
-            spec_type = request.POST.get('spec_type')
             prod_id = request.POST.get('product_id')
             mat_id = request.POST.get('material_id')
 
@@ -611,17 +831,16 @@ def mdm_module_view(request):
             mat = Material.objects.filter(id=mat_id).first() if mat_id else None
 
             sh = SpecificationHeader.objects.create(
-                spec_number=spec_no, title=title, spec_type=spec_type, product=prod, material=mat
+                spec_number=spec_no, title=title, product=prod, material=mat
             )
             UniversalAuditTrail.objects.create(
                 module_name="MDM - Specifications", entity_name=sh.spec_number, record_id=str(sh.id),
                 action='CREATE', field_name="Specification Creation",
-                new_value=f"{spec_no}: {title}", reason="New Specification Header", performed_by=request.user
+                new_value=f"{spec_no}: {title}", reason="New specification binder", performed_by=request.user
             )
             messages.success(request, f"Specification '{spec_no}' approved and registered.")
             return redirect('/mdm/?tab=specs')
 
-        # 5. Legacy Parameter Addition
         elif action_type == 'ADD_LEGACY_TEST':
             name = request.POST.get('name', '').strip()
             unit = request.POST.get('unit', '').strip()
@@ -652,8 +871,9 @@ def mdm_module_view(request):
         'legacy_tests': legacy_tests,
     })
 
+
 # ==========================================================
-# MODULE 3: INSTRUMENTS & CALIBRATION
+# 5. INSTRUMENT CALIBRATION MODULE
 # ==========================================================
 @login_required
 def instrument_module_view(request):
@@ -705,7 +925,7 @@ def instrument_module_view(request):
 
 
 # ==========================================================
-# MODULE 4: STABILITY MANAGEMENT
+# 6. STABILITY MANAGEMENT MODULE
 # ==========================================================
 @login_required
 def stability_module_view(request):
@@ -775,7 +995,7 @@ def pull_timepoint_view(request, timepoint_id):
         field_name="Chamber Pull Status",
         old_value="SCHEDULED",
         new_value=f"PULLED on {tp.actual_pull_date}",
-        reason="Scheduled pull executed from chamber",
+        reason="Scheduled chamber pull executed",
         performed_by=request.user
     )
     messages.success(request, f"Marked {tp.interval_name} timepoint as Pulled for study {tp.study.study_code}.")
@@ -783,7 +1003,7 @@ def pull_timepoint_view(request, timepoint_id):
 
 
 # ==========================================================
-# MODULE 5: INSTRUMENT / INTERFACE CONNECTOR
+# 7. INSTRUMENT / INTERFACE CONNECTOR MODULE
 # ==========================================================
 @login_required
 def connector_module_view(request):
@@ -885,7 +1105,7 @@ def simulate_instrument_read(request, connector_id):
 
 
 # ==========================================================
-# MODULE 6: AUDIT TRAIL EXPLORER
+# 8. COMPLIANCE AUDIT TRAIL EXPLORER
 # ==========================================================
 @login_required
 def audit_explorer_view(request):

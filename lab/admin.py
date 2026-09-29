@@ -8,7 +8,10 @@ from .models import (
     Department, JobType, UserProfile,
     # Enterprise MDM Models
     UnitOfMeasure, StorageCondition, Supplier, Product,
-    Material, TestMethod, SpecificationHeader, SpecificationLine
+    Material, TestMethod, SpecificationHeader, SpecificationLine,
+    # Advanced Sample & Storage Architecture
+    SourceLot, StorageLocation, WaterSampleDetail, EnvironmentalSampleDetail,
+    CustodyEvent, SampleHold, RetentionAssignment
 )
 
 # Custom Header & Title
@@ -86,8 +89,8 @@ class SpecificationLineInline(admin.TabularInline):
 
 @admin.register(SpecificationHeader)
 class SpecificationHeaderAdmin(admin.ModelAdmin):
-    list_display = ('spec_number', 'title', 'version', 'spec_type', 'product', 'material', 'effective_date', 'status')
-    list_filter = ('spec_type', 'status', 'effective_date')
+    list_display = ('spec_number', 'title', 'version', 'product', 'material', 'effective_date', 'status')
+    list_filter = ('status', 'effective_date')
     search_fields = ('spec_number', 'title')
     inlines = [SpecificationLineInline]
 
@@ -128,7 +131,98 @@ class TestDefinitionAdmin(admin.ModelAdmin):
 
 
 # ==========================================================
-# 3. INSTRUMENT CALIBRATION MODULE
+# 3. ADVANCED SAMPLE MANAGEMENT & STORAGE
+# ==========================================================
+class SampleHoldInline(admin.TabularInline):
+    model = SampleHold
+    extra = 0
+    readonly_fields = ('placed_at', 'placed_by', 'released_at', 'released_by')
+
+
+class CustodyEventInline(admin.TabularInline):
+    model = CustodyEvent
+    extra = 0
+    readonly_fields = ('transferred_at', 'released_by', 'received_by')
+
+
+@admin.register(Sample)
+class SampleAdmin(admin.ModelAdmin):
+    list_display = ('barcode', 'sample_type', 'purpose', 'batch_number', 'priority', 'status_badge', 'current_location', 'has_hold')
+    list_filter = ('status', 'sample_type', 'priority', 'received_at')
+    search_fields = ('barcode', 'batch_number', 'product__brand_name', 'material__name')
+    inlines = [SampleHoldInline, CustodyEventInline]
+
+    def has_hold(self, obj):
+        return obj.has_active_hold()
+    has_hold.boolean = True
+    has_hold.short_description = "Active Hold?"
+
+    def status_badge(self, obj):
+        colors = {
+            'RELEASED': '#198754',
+            'REJECTED': '#dc3545',
+            'OOS_INVESTIGATION': '#dc3545',
+            'HOLD': '#dc3545',
+            'UNDER_REVIEW': '#0dcaf0',
+            'IN_PROGRESS': '#ffc107',
+            'LOGGED': '#6c757d'
+        }
+        color = colors.get(obj.status, '#6c757d')
+        text_color = '#000' if obj.status in ['UNDER_REVIEW', 'IN_PROGRESS'] else '#fff'
+        return format_html(
+            '<span style="background:{}; color:{}; padding:3px 8px; border-radius:12px; font-weight:600; font-size:11px;">{}</span>',
+            color, text_color, obj.get_status_display()
+        )
+    status_badge.short_description = "Status"
+
+
+@admin.register(SourceLot)
+class SourceLotAdmin(admin.ModelAdmin):
+    list_display = ('internal_lot_number', 'supplier_lot_number', 'product', 'material', 'supplier', 'expiry_date')
+    search_fields = ('internal_lot_number', 'supplier_lot_number')
+
+
+@admin.register(StorageLocation)
+class StorageLocationAdmin(admin.ModelAdmin):
+    list_display = ('location_code', 'description', 'location_type', 'capacity_units', 'is_operational')
+    list_filter = ('location_type', 'is_operational')
+    search_fields = ('location_code', 'description')
+
+
+@admin.register(SampleHold)
+class SampleHoldAdmin(admin.ModelAdmin):
+    list_display = ('sample', 'hold_type', 'qms_reference', 'is_active', 'placed_by', 'placed_at', 'released_by')
+    list_filter = ('is_active', 'hold_type')
+    search_fields = ('sample__barcode', 'qms_reference')
+
+
+@admin.register(CustodyEvent)
+class CustodyEventAdmin(admin.ModelAdmin):
+    list_display = ('sample', 'released_by', 'received_by', 'from_location', 'to_location', 'transferred_at', 'seal_intact')
+    list_filter = ('transferred_at', 'seal_intact')
+    search_fields = ('sample__barcode',)
+
+
+@admin.register(RetentionAssignment)
+class RetentionAssignmentAdmin(admin.ModelAdmin):
+    list_display = ('sample', 'category', 'assigned_storage', 'retain_until_date', 'is_disposed')
+    list_filter = ('category', 'is_disposed')
+
+
+@admin.register(WaterSampleDetail)
+class WaterSampleDetailAdmin(admin.ModelAdmin):
+    list_display = ('sample', 'sampling_point', 'water_grade', 'sampling_mode', 'flush_duration_minutes')
+    list_filter = ('water_grade', 'sampling_mode')
+
+
+@admin.register(EnvironmentalSampleDetail)
+class EnvironmentalSampleDetailAdmin(admin.ModelAdmin):
+    list_display = ('sample', 'room_id', 'cleanroom_grade', 'monitoring_method', 'exposure_start')
+    list_filter = ('cleanroom_grade', 'monitoring_method')
+
+
+# ==========================================================
+# 4. INSTRUMENT CALIBRATION MODULE
 # ==========================================================
 @admin.register(Instrument)
 class InstrumentAdmin(admin.ModelAdmin):
@@ -147,7 +241,7 @@ class InstrumentAdmin(admin.ModelAdmin):
 
 
 # ==========================================================
-# 4. INSTRUMENT / INTERFACE CONNECTOR MODULE
+# 5. INSTRUMENT / INTERFACE CONNECTOR MODULE
 # ==========================================================
 @admin.register(InstrumentConnector)
 class InstrumentConnectorAdmin(admin.ModelAdmin):
@@ -173,32 +267,8 @@ class InstrumentDataFeedAdmin(admin.ModelAdmin):
 
 
 # ==========================================================
-# 5. SAMPLE LIFE CYCLE, OOS & RESULTS
+# 6. RESULTS & OOS INVESTIGATIONS
 # ==========================================================
-@admin.register(Sample)
-class SampleAdmin(admin.ModelAdmin):
-    list_display = ('barcode', 'sample_type', 'batch_number', 'received_at', 'status_badge', 'logged_by', 'reviewed_by', 'released_by')
-    list_filter = ('status', 'sample_type', 'received_at')
-    search_fields = ('barcode', 'batch_number')
-
-    def status_badge(self, obj):
-        colors = {
-            'RELEASED': '#198754',
-            'REJECTED': '#dc3545',
-            'OOS_INVESTIGATION': '#dc3545',
-            'UNDER_REVIEW': '#0dcaf0',
-            'IN_PROGRESS': '#ffc107',
-            'LOGGED': '#6c757d'
-        }
-        color = colors.get(obj.status, '#6c757d')
-        text_color = '#000' if obj.status in ['UNDER_REVIEW', 'IN_PROGRESS'] else '#fff'
-        return format_html(
-            '<span style="background:{}; color:{}; padding:3px 8px; border-radius:12px; font-weight:600; font-size:11px;">{}</span>',
-            color, text_color, obj.get_status_display()
-        )
-    status_badge.short_description = "Lifecycle Status"
-
-
 @admin.register(TestResult)
 class TestResultAdmin(admin.ModelAdmin):
     list_display = ('sample', 'test', 'numeric_value', 'status', 'instrument', 'analyst', 'entered_at')
@@ -214,7 +284,7 @@ class OOSInvestigationAdmin(admin.ModelAdmin):
 
 
 # ==========================================================
-# 6. STABILITY MANAGEMENT MODULE
+# 7. STABILITY MANAGEMENT MODULE
 # ==========================================================
 class StabilityTimepointInline(admin.TabularInline):
     model = StabilityTimepoint
@@ -237,7 +307,7 @@ class StabilityTimepointAdmin(admin.ModelAdmin):
 
 
 # ==========================================================
-# 7. SECURITY, USER PROFILES & DEPARTMENTS
+# 8. SECURITY, USER PROFILES & DEPARTMENTS
 # ==========================================================
 @admin.register(Department)
 class DepartmentAdmin(admin.ModelAdmin):

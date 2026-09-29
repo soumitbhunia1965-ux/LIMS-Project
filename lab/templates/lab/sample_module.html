@@ -3,88 +3,163 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
     <div>
-        <h3 class="fw-bold mb-0">Sample Management Module</h3>
-        <p class="text-muted small">Sample registration, analytical execution, technical review, and QA release.</p>
+        <h3 class="fw-bold mb-0" style="color: #071527;">
+            <i class="bi bi-eyedropper text-primary me-2"></i>Sample Life Cycle & Accessioning
+        </h3>
+        <p class="text-muted small">
+            End-to-End Tracking: Commercial Releases, Water/EM Monitoring, Chain of Custody, Quality Holds, and CoA Generation.
+        </p>
     </div>
-    <a href="{% url 'sample_entry' %}" class="btn btn-primary"><i class="bi bi-plus-lg me-1"></i>Log New Sample</a>
+    <div class="d-flex gap-2">
+        <a href="{% url 'sample_entry' %}" class="btn btn-primary fw-semibold">
+            <i class="bi bi-plus-circle me-1"></i>Accession New Sample
+        </a>
+    </div>
 </div>
 
-<!-- Filter Bar -->
-<div class="card p-3 shadow-sm mb-4 border-0">
+<!-- Filters Bar -->
+<div class="card shadow-sm border-0 mb-4 p-3 bg-white">
     <form method="GET" class="row g-2 align-items-center">
-        <div class="col-md-4">
-            <input type="text" name="q" value="{{ query }}" class="form-control form-control-sm" placeholder="Search by Barcode or Batch #">
-        </div>
         <div class="col-md-3">
-            <select name="status" class="form-select form-select-sm">
-                <option value="">All Statuses</option>
-                <option value="LOGGED" {% if status_filter == 'LOGGED' %}selected{% endif %}>Logged</option>
-                <option value="IN_PROGRESS" {% if status_filter == 'IN_PROGRESS' %}selected{% endif %}>In Progress</option>
-                <option value="UNDER_REVIEW" {% if status_filter == 'UNDER_REVIEW' %}selected{% endif %}>Under Review</option>
-                <option value="OOS_INVESTIGATION" {% if status_filter == 'OOS_INVESTIGATION' %}selected{% endif %}>OOS Investigation</option>
-                <option value="RELEASED" {% if status_filter == 'RELEASED' %}selected{% endif %}>Released</option>
-                <option value="REJECTED" {% if status_filter == 'REJECTED' %}selected{% endif %}>Rejected</option>
+            <input type="text" name="q" class="form-control form-control-sm" placeholder="Search Barcode, Batch, Material..." value="{{ query }}">
+        </div>
+        <div class="col-md-2">
+            <select name="sample_type" class="form-select form-select-sm">
+                <option value="">All Sample Types</option>
+                <option value="FINISHED_PRODUCT" {% if type_filter == 'FINISHED_PRODUCT' %}selected{% endif %}>Finished Products</option>
+                <option value="RAW_MATERIAL" {% if type_filter == 'RAW_MATERIAL' %}selected{% endif %}>Raw Materials / APIs</option>
+                <option value="WATER" {% if type_filter == 'WATER' %}selected{% endif %}>Water Testing</option>
+                <option value="ENVIRONMENTAL" {% if type_filter == 'ENVIRONMENTAL' %}selected{% endif %}>Environmental Monitoring</option>
+                <option value="STABILITY" {% if type_filter == 'STABILITY' %}selected{% endif %}>Stability Samples</option>
             </select>
         </div>
         <div class="col-md-2">
-            <button type="submit" class="btn btn-sm btn-dark w-100">Filter</button>
+            <select name="status" class="form-select form-select-sm">
+                <option value="">All Lifecycle Statuses</option>
+                <option value="LOGGED" {% if status_filter == 'LOGGED' %}selected{% endif %}>Logged</option>
+                <option value="IN_PROGRESS" {% if status_filter == 'IN_PROGRESS' %}selected{% endif %}>In Testing</option>
+                <option value="UNDER_REVIEW" {% if status_filter == 'UNDER_REVIEW' %}selected{% endif %}>Under Review</option>
+                <option value="OOS_INVESTIGATION" {% if status_filter == 'OOS_INVESTIGATION' %}selected{% endif %}>OOS Investigation</option>
+                <option value="HOLD" {% if status_filter == 'HOLD' %}selected{% endif %}>On Quality Hold</option>
+                <option value="RELEASED" {% if status_filter == 'RELEASED' %}selected{% endif %}>QA Released</option>
+                <option value="REJECTED" {% if status_filter == 'REJECTED' %}selected{% endif %}>QA Rejected</option>
+            </select>
+        </div>
+        <div class="col-md-2">
+            <select name="hold" class="form-select form-select-sm">
+                <option value="">All Holds</option>
+                <option value="YES" {% if hold_filter == 'YES' %}selected{% endif %}>Active Quality Holds Only</option>
+            </select>
+        </div>
+        <div class="col-md-3 d-flex gap-2">
+            <button type="submit" class="btn btn-dark btn-sm px-3"><i class="bi bi-filter me-1"></i>Filter</button>
+            <a href="{% url 'sample_module' %}" class="btn btn-outline-secondary btn-sm">Reset</a>
         </div>
     </form>
 </div>
 
+<!-- Samples Roster -->
 <div class="card shadow-sm border-0">
-    <table class="table table-hover align-middle mb-0">
-        <thead class="table-light">
-            <tr>
-                <th>Barcode</th>
-                <th>Type</th>
-                <th>Batch #</th>
-                <th>Life Cycle Status</th>
-                <th>Barcode</th>
-                <th>CoA</th>
-                <th>Compliance Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for sample in samples %}
-            <tr>
-                <td><strong>{{ sample.barcode }}</strong></td>
-                <td>{{ sample.sample_type }}</td>
-                <td>{{ sample.batch_number }}</td>
-                <td>
-                    {% if sample.status == 'RELEASED' %}<span class="badge bg-success">RELEASED</span>
-                    {% elif sample.status == 'REJECTED' %}<span class="badge bg-danger">REJECTED</span>
-                    {% elif sample.status == 'OOS_INVESTIGATION' %}<span class="badge bg-danger">OOS INVESTIGATION</span>
-                    {% elif sample.status == 'UNDER_REVIEW' %}<span class="badge bg-info text-dark">UNDER REVIEW</span>
-                    {% else %}<span class="badge bg-secondary">{{ sample.status }}</span>{% endif %}
-                </td>
-                <td>
-                    <a href="{% url 'barcode_image' sample.barcode %}" target="_blank" class="btn btn-sm btn-outline-dark">
-                        <i class="bi bi-upc-scan"></i>
-                    </a>
-                </td>
-                <td>
-                    <a href="{% url 'generate_coa' sample.id %}" target="_blank" class="btn btn-sm btn-outline-danger">
-                        <i class="bi bi-file-earmark-pdf"></i> CoA
-                    </a>
-                </td>
-                <td>
-                    {% if sample.status == 'LOGGED' or sample.status == 'IN_PROGRESS' %}
-                        <a href="{% url 'enter_results' sample.id %}" class="btn btn-sm btn-success">Enter Results</a>
-                    {% elif sample.status == 'UNDER_REVIEW' %}
-                        <a href="{% url 'technical_review' sample.id %}" class="btn btn-sm btn-primary">Technical Review</a>
-                        <a href="{% url 'qa_release' sample.id %}" class="btn btn-sm btn-outline-success">QA Release</a>
-                    {% elif sample.status == 'OOS_INVESTIGATION' %}
-                        <a href="{% url 'oos_investigation' sample.id %}" class="btn btn-sm btn-danger">Phase I Investigation</a>
-                    {% else %}
-                        <span class="text-muted small">Disposition Complete</span>
-                    {% endif %}
-                </td>
-            </tr>
-            {% empty %}
-            <tr><td colspan="7" class="text-center py-4 text-muted">No samples found.</td></tr>
-            {% endfor %}
-        </tbody>
-    </table>
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>Barcode / Priority</th>
+                    <th>Sample Type & Purpose</th>
+                    <th>Target Product / Material</th>
+                    <th>Batch / Lot No</th>
+                    <th>Current Location</th>
+                    <th>Quality Hold</th>
+                    <th>Status</th>
+                    <th>Workflow Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for s in samples %}
+                <tr>
+                    <td>
+                        <a href="{% url 'sample_detail' s.id %}" class="fw-bold text-decoration-none text-primary">
+                            {{ s.barcode }}
+                        </a>
+                        <br>
+                        {% if s.priority == 'CRITICAL' %}
+                            <span class="badge bg-danger">Critical</span>
+                        {% elif s.priority == 'URGENT' %}
+                            <span class="badge bg-warning text-dark">Urgent</span>
+                        {% else %}
+                            <span class="badge bg-light text-secondary border">Normal</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="fw-semibold">{{ s.get_sample_type_display }}</span>
+                        <br><small class="text-muted">{{ s.get_purpose_display }}</small>
+                    </td>
+                    <td>
+                        {% if s.product %}
+                            <strong>{{ s.product.brand_name }}</strong>
+                        {% elif s.material %}
+                            <strong>{{ s.material.name }}</strong>
+                        {% elif s.water_detail %}
+                            <span class="text-info">{{ s.water_detail.sampling_point }} ({{ s.water_detail.water_grade }})</span>
+                        {% elif s.environmental_detail %}
+                            <span class="text-secondary">{{ s.environmental_detail.room_id }} ({{ s.environmental_detail.cleanroom_grade }})</span>
+                        {% else %}
+                            <span class="text-muted">Unspecified</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="font-monospace fw-semibold">{{ s.batch_number }}</span>
+                    </td>
+                    <td>
+                        <small class="text-dark"><i class="bi bi-geo-alt me-1 text-danger"></i>{{ s.current_location|default:"Receiving Dock" }}</small>
+                    </td>
+                    <td>
+                        {% if s.has_active_hold %}
+                            <span class="badge bg-danger"><i class="bi bi-shield-slash-fill me-1"></i>HOLD ACTIVE</span>
+                        {% else %}
+                            <span class="badge bg-success-subtle text-success border border-success"><i class="bi bi-check-circle me-1"></i>Clear</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if s.status == 'RELEASED' %}
+                            <span class="badge bg-success">Released</span>
+                        {% elif s.status == 'REJECTED' or s.status == 'OOS_INVESTIGATION' %}
+                            <span class="badge bg-danger">{{ s.get_status_display }}</span>
+                        {% elif s.status == 'HOLD' %}
+                            <span class="badge bg-danger">Quality Hold</span>
+                        {% elif s.status == 'UNDER_REVIEW' %}
+                            <span class="badge bg-info text-dark">Under Review</span>
+                        {% else %}
+                            <span class="badge bg-secondary">{{ s.get_status_display }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="dropdown">
+                            <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                                Actions
+                            </button>
+                            <ul class="dropdown-menu dropdown-menu-end shadow border-0">
+                                <li><a class="dropdown-item" href="{% url 'sample_detail' s.id %}"><i class="bi bi-eye me-2 text-primary"></i>Sample Cockpit</a></li>
+                                {% if not s.has_active_hold %}
+                                    <li><a class="dropdown-item" href="{% url 'enter_results' s.id %}"><i class="bi bi-pencil-square me-2 text-warning"></i>Enter Analytical Results</a></li>
+                                    <li><a class="dropdown-item" href="{% url 'technical_review' s.id %}"><i class="bi bi-file-earmark-check me-2 text-info"></i>Technical Review</a></li>
+                                    <li><a class="dropdown-item" href="{% url 'qa_release' s.id %}"><i class="bi bi-check2-all me-2 text-success"></i>QA Disposition</a></li>
+                                {% endif %}
+                                <li><hr class="dropdown-divider"></li>
+                                <li><a class="dropdown-item" href="{% url 'generate_coa' s.id %}" target="_blank"><i class="bi bi-file-pdf me-2 text-danger"></i>Certificate of Analysis (CoA)</a></li>
+                            </ul>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8" class="text-center py-4 text-muted">
+                        No samples found matching criteria. Click "+ Accession New Sample" to register a batch.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
 </div>
 {% endblock %}
