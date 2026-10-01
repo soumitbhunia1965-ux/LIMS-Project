@@ -89,8 +89,8 @@ class SpecificationLineInline(admin.TabularInline):
 
 @admin.register(SpecificationHeader)
 class SpecificationHeaderAdmin(admin.ModelAdmin):
-    list_display = ('spec_number', 'title', 'version', 'product', 'material', 'effective_date', 'status')
-    list_filter = ('status', 'effective_date')
+    list_display = ('spec_number', 'title', 'version', 'spec_type', 'product', 'material', 'effective_date', 'status')
+    list_filter = ('spec_type', 'status', 'effective_date')
     search_fields = ('spec_number', 'title')
     inlines = [SpecificationLineInline]
 
@@ -252,9 +252,10 @@ class InstrumentConnectorAdmin(admin.ModelAdmin):
     def status_badge(self, obj):
         color = '#198754' if obj.status == 'ONLINE' else ('#0dcaf0' if obj.status == 'STREAMING' else '#dc3545')
         text_color = '#000' if obj.status == 'STREAMING' else '#fff'
+        display_label = obj.get_status_display() if hasattr(obj, 'get_status_display') else obj.status
         return format_html(
             '<span style="background:{}; color:{}; padding:3px 8px; border-radius:12px; font-weight:600; font-size:11px;">{}</span>',
-            color, text_color, obj.get_status_display()
+            color, text_color, display_label
         )
     status_badge.short_description = "Interface Status"
 
